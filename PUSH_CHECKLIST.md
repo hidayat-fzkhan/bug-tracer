@@ -6,7 +6,6 @@ Before pushing to GitHub, verify everything is ready:
 - [x] README.md - Comprehensive setup and usage guide
 - [x] DEVELOPMENT.md - Development workflow and architecture
 - [x] CONTRIBUTING.md - Contribution guidelines
-- [x] MCP_README.md - AI integration details
 - [x] frontend/ARCHITECTURE.md - Component architecture
 
 ## ✅ Configuration & Ignore Files
@@ -20,10 +19,8 @@ Before pushing to GitHub, verify everything is ready:
 - [x] Express API server with hot-reload
 - [x] Azure DevOps integration
 - [x] GitHub commit fetching
-- [x] Ranking algorithm
 - [x] AI analysis (Claude + Ollama support)
-- [x] MCP server for repo access
-- [x] Auto-reload scripts (`npm run dev:api`)
+- [x] Auto-reload scripts (`npm run dev`)
 
 ## ✅ Frontend Setup
 - [x] React component architecture

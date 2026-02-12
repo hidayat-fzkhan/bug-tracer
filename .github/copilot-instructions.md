@@ -3,12 +3,11 @@
 Project summary:
 - This repo is "BugTracer" (code name: bug_tracer, version: 1.0.0) - an intelligent bug triage tool
 - It has two main apps:
-  - backend/: Node.js + TypeScript CLI and API server that pulls Azure DevOps (TFS) bugs and ranks GitHub commits with AI analysis
+  - backend/: Node.js + TypeScript API server that pulls Azure DevOps (TFS) bugs and analyzes them with AI
   - frontend/: Vite + React UI that calls the backend API and shows bugs + suspect commits
 
 Key workflows:
-- Backend CLI: `cd backend && npm run dev`
-- Backend API: `cd backend && npm run dev:api`
+- Backend API: `cd backend && npm run dev`
 - Frontend UI: `cd frontend && npm run dev`
 
 Important config (backend/.env):
@@ -19,10 +18,9 @@ Important config (backend/.env):
 
 Core behavior:
 - Fetch Azure DevOps bugs using WIQL.
-- Fetch recent GitHub commits and rank by textual similarity and bug ID references.
-- When AI_API_KEY is set: analyze bugs using Claude AI with full repo context.
+- Fetch recent GitHub commits with file changes.
+- When USE_OLLAMA or AI_API_KEY is set: analyze bugs using AI (Ollama or Claude).
 - UI calls `/api/bugs` with optional `bugId` query.
-- MCP server (Model Context Protocol) provides GitHub repo read access for AI agents.
 
 When editing:
 - Keep backend code in backend/src and frontend code in frontend/src.

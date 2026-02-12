@@ -29,7 +29,7 @@ Keep these running in separate terminals:
 **Terminal 1 - Backend API** (auto-reloads on changes):
 ```bash
 cd backend
-npm run dev:api
+npm run dev
 ```
 
 **Terminal 2 - Frontend UI** (auto-reloads on changes):
@@ -53,18 +53,15 @@ Just save your changes and the servers will automatically reload!
 ### Backend (`/backend`)
 
 **Key Files:**
-- `src/index.ts` - CLI entry point
 - `src/server.ts` - Express API server
 - `src/ado.ts` - Azure DevOps integration
 - `src/github.ts` - GitHub API client
-- `src/rank.ts` - Commit ranking algorithm
 - `src/ai.ts` - AI analysis (Claude/Ollama)
 - `src/config.ts` - Configuration from env vars
 
 **Key Dependencies:**
 - `express` - Web framework
 - `@octokit/rest` - GitHub API client
-- `commander` - CLI argument parsing
 - `tsx` - TypeScript execution with watch mode
 - `@anthropic-ai/sdk` - Claude API client
 
