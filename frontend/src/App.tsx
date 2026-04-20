@@ -1,4 +1,5 @@
-import { Stack, Typography } from "@mui/material";
+import { useEffect, useState } from "react";
+import { Button, Stack, Typography } from "@mui/material";
 import { BugList } from "./components/bug/BugList";
 import { EmptyState } from "./components/common/EmptyState";
 import { ErrorMessage } from "./components/common/ErrorMessage";
@@ -7,8 +8,81 @@ import { SearchBar } from "./components/search/SearchBar";
 import { useBugs } from "./hooks/useBugs";
 import { formatDate } from "./utils/formatters";
 
+function getBugIdFromPath(pathname: string): string | null {
+  const match = /^\/analyze\/([^/]+)$/.exec(pathname);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 export default function App() {
-  const { query, setQuery, loading, error, bugs, generatedAt, load, handleStop } = useBugs();
+  const [pathname, setPathname] = useState(() => globalThis.location.pathname);
+  const {
+    query,
+    setQuery,
+    loading,
+    error,
+    analysisLoading,
+    analysisError,
+    bugs,
+    selectedBugId,
+    generatedAt,
+    load,
+    handleStop,
+  } = useBugs();
+
+  const routeBugId = getBugIdFromPath(pathname);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setPathname(globalThis.location.pathname);
+    };
+
+    globalThis.addEventListener("popstate", handlePopState);
+    return () => {
+      globalThis.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
+
+  useEffect(() => {
+    setQuery(routeBugId ?? "");
+    void load(routeBugId ?? undefined);
+  }, [load, routeBugId, setQuery]);
+
+  const navigateTo = (nextPath: string) => {
+    if (globalThis.location.pathname === nextPath) {
+      return false;
+    }
+
+    globalThis.history.pushState({}, "", nextPath);
+    setPathname(nextPath);
+    return true;
+  };
+
+  const openBug = (bugId: number) => {
+    navigateTo(`/analyze/${encodeURIComponent(String(bugId))}`);
+  };
+
+  const showLatestBugs = () => {
+    setQuery("");
+    if (!navigateTo("/")) {
+      void load();
+    }
+  };
+
+  const handleSearch = (bugId?: string) => {
+    const trimmedBugId = bugId?.trim();
+
+    if (!trimmedBugId) {
+      showLatestBugs();
+      return;
+    }
+
+    setQuery(trimmedBugId);
+    if (!navigateTo(`/analyze/${encodeURIComponent(trimmedBugId)}`)) {
+      void load(trimmedBugId);
+    }
+  };
+
+  const selectedBug = bugs.length === 1 && selectedBugId ? bugs[0] : null;
 
   return (
     <Layout loading={loading}>
@@ -17,7 +91,7 @@ export default function App() {
           query={query}
           loading={loading}
           onQueryChange={setQuery}
-          onSearch={load}
+          onSearch={handleSearch}
           onStop={handleStop}
         />
 
@@ -29,7 +103,23 @@ export default function App() {
           </Typography>
         )}
 
-        {bugs.length === 0 && !loading ? <EmptyState /> : <BugList bugs={bugs} />}
+        {selectedBug && (
+          <Button variant="text" onClick={showLatestBugs} sx={{ alignSelf: "flex-start" }}>
+            Back To Bug List
+          </Button>
+        )}
+
+        {bugs.length === 0 && !loading ? (
+          <EmptyState />
+        ) : (
+          <BugList
+            bugs={bugs}
+            onOpenBug={openBug}
+            selectedBugId={selectedBug?.id}
+            analysisLoading={analysisLoading}
+            analysisError={analysisError}
+          />
+        )}
       </Stack>
     </Layout>
   );

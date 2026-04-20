@@ -19,7 +19,7 @@ Before pushing to GitHub, verify everything is ready:
 - [x] Express API server with hot-reload
 - [x] Azure DevOps integration
 - [x] GitHub commit fetching
-- [x] AI analysis (Claude + Ollama support)
+- [x] AI analysis (Anthropic Claude with live GitHub repo context)
 - [x] Auto-reload scripts (`npm run dev`)
 
 ## ✅ Frontend Setup

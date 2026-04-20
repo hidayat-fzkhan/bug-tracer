@@ -56,7 +56,7 @@ Just save your changes and the servers will automatically reload!
 - `src/server.ts` - Express API server
 - `src/ado.ts` - Azure DevOps integration
 - `src/github.ts` - GitHub API client
-- `src/ai.ts` - AI analysis (Claude/Ollama)
+- `src/ai.ts` - AI analysis (Anthropic Claude)
 - `src/config.ts` - Configuration from env vars
 
 **Key Dependencies:**
@@ -118,7 +118,7 @@ For detailed component architecture, see [frontend/ARCHITECTURE.md](frontend/ARC
 **Backend:**
 ```bash
 cd backend
-npm run dev:api
+npm run dev
 # Logs appear in terminal
 # Check backend/.env for configuration
 ```
@@ -150,7 +150,7 @@ Edit `backend/.env` and the API will auto-reload:
 ADO_DAYS=7        # Look back 7 days instead of 30
 ADO_TOP=10        # Get 10 bugs instead of 5
 GITHUB_COMMITS=30 # Analyze fewer commits for faster ranking
-RANK_MIN_SCORE=0.15  # Hide weaker matches
+GITHUB_REPO_BRANCH=main  # Read live code from a different branch
 ```
 
 ## Troubleshooting
@@ -165,7 +165,7 @@ lsof -i :4000
 kill -9 <PID>
 
 # Or use different ports:
-API_PORT=4001 npm run dev:api
+API_PORT=4001 npm run dev
 VITE_PORT=5174 npm run dev
 ```
 

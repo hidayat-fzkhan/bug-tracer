@@ -12,14 +12,13 @@ Key workflows:
 
 Important config (backend/.env):
 - ADO_ORG, ADO_PROJECT, ADO_PAT
-- GITHUB_REPO, GITHUB_TOKEN
-- Optional: ADO_AREA_PATH, ADO_DAYS, ADO_TOP, GITHUB_COMMITS, RANK_MIN_SCORE
-- Optional: AI_API_KEY (Anthropic Claude for deep analysis)
+- GITHUB_REPO, GITHUB_REPO_BRANCH, ANTHROPIC_KEY
+- Optional: GITHUB_TOKEN, ADO_AREA_PATH, ADO_DAYS, ADO_TOP, GITHUB_COMMITS
 
 Core behavior:
 - Fetch Azure DevOps bugs using WIQL.
 - Fetch recent GitHub commits with file changes.
-- When USE_OLLAMA or AI_API_KEY is set: analyze bugs using AI (Ollama or Claude).
+- Read live code from the configured GitHub repository branch and analyze bugs using Anthropic Claude.
 - UI calls `/api/bugs` with optional `bugId` query.
 
 When editing:

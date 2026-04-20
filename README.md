@@ -10,8 +10,8 @@ An intelligent bug triage tool that analyzes Azure DevOps bugs and identifies su
 - Token-based similarity matching with bug ID detection
 
 🤖 **AI-Powered Insights**
-- Integrates with Ollama (local, free) or Claude API (cloud, paid)
-- Performs deep repository analysis to identify root causes
+- Uses Anthropic Claude with live GitHub branch context
+- Reads relevant repository code from GitHub to identify root causes
 - Provides actionable recommendations for fixing bugs
 
 🎨 **Intuitive Web UI**
@@ -35,7 +35,7 @@ bug-tracer/
 │   │   ├── server.ts     # Express API server
 │   │   ├── ado.ts        # Azure DevOps integration
 │   │   ├── github.ts     # GitHub API client
-│   │   ├── ai.ts         # AI analysis (Claude/Ollama)
+│   │   ├── ai.ts         # AI analysis (Anthropic Claude)
 │   │   └── config.ts     # Configuration loader
 │   └── package.json
 │
@@ -60,8 +60,8 @@ bug-tracer/
 ### Prerequisites
 - Node.js 18+ and npm
 - Azure DevOps/TFS account and PAT token
-- GitHub account and PAT token
-- (Optional) Docker with Ollama for local AI
+- GitHub repository access
+- Anthropic API key
 
 ### 1. Environment Setup
 
@@ -69,7 +69,7 @@ Clone and navigate to the repo:
 
 ```bash
 git clone <repo-url>
-cd bugs-agent
+cd bug-tracer
 ```
 
 Create `.env` files:
@@ -89,12 +89,12 @@ ADO_PAT=***
 ADO_AREA_PATH="Your\\Area\\Path"
 
 # GitHub
-GITHUB_REPO=owner/repo
+GITHUB_REPO=https://github.com/owner/repo
+GITHUB_REPO_BRANCH=main
 GITHUB_TOKEN=ghp_***
 
-# Optional: AI Configuration
-USE_OLLAMA=true
-OLLAMA_MODEL=llama3
+# Anthropic AI
+ANTHROPIC_KEY=sk-ant-...
 ```
 
 ### 2. Install Dependencies
@@ -153,57 +153,40 @@ curl http://localhost:4000/api/bugs?bugId=12345
 | `ADO_ORG` | Azure DevOps organization (e.g., `myorg` for `dev.azure.com/myorg`) |
 | `ADO_PROJECT` | Azure DevOps project name |
 | `ADO_PAT` | PAT token with Work Items read access |
-| `GITHUB_REPO` | Repository in format `owner/repo` |
-| `GITHUB_TOKEN` | GitHub PAT with repo read access |
+| `GITHUB_REPO` | GitHub repository URL or `owner/repo` |
+| `GITHUB_REPO_BRANCH` | Branch to read live code from |
+| `ANTHROPIC_KEY` | Anthropic Claude API key |
 
 ### Optional Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ADO_DAYS` | 30 | How many days back to look for bugs |
-| `ADO_TOP` | 5 | Number of bugs to fetch |
+| `ADO_DAYS` | 7 | How many days back to look for bugs |
+| `ADO_TOP` | 10 | Number of bugs to fetch |
+| `ADO_STATES` | `New,Active` | Bug states to fetch |
 | `ADO_AREA_PATH` | - | Filter bugs by area path |
-| `GITHUB_COMMITS` | 50 | Number of recent commits to analyze |
-| `RANK_MIN_SCORE` | 0.08 | Minimum score to show commits |
+| `GITHUB_TOKEN` | - | Optional GitHub token for private repos or higher rate limits |
+| `GITHUB_COMMITS` | 50 | Number of recent commits to pass into AI alongside repo code context |
 | `API_PORT` | 4000 | Port for API server |
-| `USE_OLLAMA` | false | Use local Ollama instead of Claude |
-| `OLLAMA_MODEL` | llama3 | Ollama model name |
-| `OLLAMA_BASE_URL` | http://localhost:11434 | Ollama server URL |
-| `AI_API_KEY` | - | Anthropic Claude API key |
 
 ## AI Analysis
 
-### Option 1: Local AI with Ollama (Free, Recommended)
-
-Install and run Ollama:
-
-```bash
-# macOS
-brew install ollama
-
-# Or download from https://ollama.ai
-```
+BugTracer uses Anthropic Claude for AI-driven investigation.
 
 Configure `.env`:
-```env
-USE_OLLAMA=true
-OLLAMA_MODEL=llama3
-```
-
-Pull a model:
-```bash
-ollama pull llama3
-ollama serve
-```
-
-### Option 2: Claude API (Cloud, Paid)
-
-Get an API key from https://console.anthropic.com/ and configure:
 
 ```env
-AI_API_KEY=sk-ant-...
-USE_OLLAMA=false
+ANTHROPIC_KEY=sk-ant-...
+ANTHROPIC_MODEL=claude-3-7-sonnet-latest
+GITHUB_REPO=https://github.com/owner/repo
+GITHUB_REPO_BRANCH=main
 ```
+
+How AI gets code access:
+- The backend reads the live GitHub repository tree from `GITHUB_REPO`
+- It fetches relevant files from `GITHUB_REPO_BRANCH`
+- It extracts bounded code snippets related to the bug text
+- Those snippets are sent to Anthropic together with bug details and recent commits
 
 ## Development
 
@@ -212,7 +195,7 @@ USE_OLLAMA=false
 Auto-reload API server on file changes:
 ```bash
 cd backend
-npm run dev:api
+npm run dev
 ```
 
 TypeScript compilation:
@@ -250,7 +233,7 @@ BugTracer connects to both Azure DevOps and GitHub to correlate bugs with code c
     │                                    │
     │  1. Fetch Bugs                     │
     │  2. Fetch Commits                  │
-    │  3. AI Analysis (Ollama/Claude)    │
+    │  3. AI Analysis (Anthropic)        │
     └──────────────┬─────────────────────┘
                    │
                    │ JSON API
@@ -301,7 +284,7 @@ GET https://dev.azure.com/{organization}/{project}/_apis/wit/workitems/{id}
 
 **What happens:**
 - Backend uses GitHub REST API via Octokit client
-- Fetches recent commits from the default branch
+- Fetches recent commits from the configured branch
 - Includes file changes for each commit
 
 **API Call:**
@@ -329,11 +312,13 @@ GET https://api.github.com/repos/{owner}/{repo}/commits/{sha}
 **What happens:**
 
 ```typescript
-// 1. Send context to AI (Ollama or Claude)
+// 1. Send context to Anthropic Claude
 const aiInput = {
   bugTitle: "Application crashes on login",
   bugDescription: "Steps to reproduce: 1. Open app 2. Enter credentials...",
   reproSteps: "User reports crash when...",
+  repoBranch: "main",
+  repoContext: "File: src/auth/login.ts\n...",
   recentCommits: [
     {
       sha: "a1b2c3d4",
@@ -356,10 +341,10 @@ const aiResponse = {
 }
 ```
 
-**AI Providers:**
-
-- **Ollama (Local):** Runs on http://localhost:11434, uses llama3 or gpt-oss:20b
-- **Claude API (Cloud):** Anthropic's Claude 3.5 Sonnet via REST API
+Anthropic reviews:
+- The Azure DevOps bug title, description, and repro steps
+- Recent GitHub commits from the configured branch
+- Relevant code snippets fetched live from the repository branch
 
 #### 4. **Data Enrichment & Response**
 
@@ -411,8 +396,14 @@ const enrichedCommits = aiResult.suspectCommits.map(shaPrefix => {
 
 **GitHub PAT (Personal Access Token):**
 - Created in: GitHub → Settings → Developer Settings → Personal Access Tokens
-- Permissions needed: **repo (read)**
+- Permissions needed: **repo (read)** for private repositories
+- Optional for public repositories, but recommended to avoid low rate limits
 - Used as: `Authorization: Bearer {TOKEN}`
+
+**Anthropic API Key:**
+- Created in: Anthropic Console
+- Used to call Claude for bug analysis
+- Stored in: `ANTHROPIC_KEY`
 
 ### Configuration Flow
 
@@ -438,11 +429,10 @@ Frontend (React UI)
 
 **GitHub API:**
 - Authenticated: 5,000 requests/hour
-- Fetching 50 commits ≈ 51 API calls (commits + 50 commit details)
+- Fetching commits and repository snippets increases API usage
 - Typical response: 100-300ms per request
 
 **AI Analysis:**
-- Ollama (local): 2-10 seconds depending on model and hardware
 - Claude API: 3-8 seconds depending on prompt size
 - Only runs for single-bug queries to avoid slowdowns
 
@@ -463,7 +453,7 @@ score = tokenOverlap + bugIdBoost + filenameScore - mergePenalty
 - **Runtime**: Node.js with TypeScript
 - **Framework**: Express.js
 - **APIs**: Azure DevOps REST, GitHub REST via Octokit
-- **AI**: Anthropic Claude SDK + Ollama HTTP API
+- **AI**: Anthropic Claude SDK
 - **Type Safety**: TypeScript with strict mode
 
 ### Frontend Stack
@@ -478,22 +468,16 @@ See [frontend/ARCHITECTURE.md](frontend/ARCHITECTURE.md) for fine-grained detail
 ## Troubleshooting
 
 ### API server not reloading on changes
-Make sure you're using `npm run dev:api` (not `npm start`). The `tsx watch` command provides hot-reload.
+Make sure you're using `npm run dev` (not `npm start`). The `tsx watch` command provides hot-reload.
 
 ### "Request cancelled" error
 This is normal - it means you clicked the STOP button. Just search again.
 
-### Ollama connection refused
-Make sure Ollama is running:
-```bash
-ollama serve
-```
-
 ### AI analysis not running
 Check that:
-1. `USE_OLLAMA=true` is set in `.env`, OR
-2. `AI_API_KEY` is set in `.env`
-3. API logs show which AI provider is active
+1. `ANTHROPIC_KEY` is set in `.env`
+2. `GITHUB_REPO` and `GITHUB_REPO_BRANCH` are set correctly
+3. API logs show the `[AI][github-context]` line
 
 ### Empty bugs list
 1. Verify Azure DevOps credentials and bug visibility
@@ -525,6 +509,4 @@ Personal project - adjust as needed.
 
 - [Azure DevOps REST API](https://learn.microsoft.com/en-us/rest/api/azure/devops)
 - [GitHub REST API](https://docs.github.com/en/rest)
-- [MCP Protocol](https://modelcontextprotocol.io)
-- [Ollama](https://ollama.ai)
 - [Claude API](https://anthropic.com/docs)

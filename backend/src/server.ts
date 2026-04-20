@@ -3,7 +3,7 @@ import express from "express";
 import { fetchBugById, fetchNewBugs } from "./ado.js";
 import { analyzeWithAI } from "./ai.js";
 import { loadConfig } from "./config.js";
-import { fetchRecentCommits } from "./github.js";
+import { fetchGitHubRepoContext, fetchRecentCommits } from "./github.js";
 import { stripHtmlToText, truncate } from "./text.js";
 
 const app = express();
@@ -16,14 +16,126 @@ function buildBugText(bug: {
   description?: string;
   reproSteps?: string;
   tags?: string;
-}): { summary?: string } {
+}): { summary?: string; description?: string; reproSteps?: string } {
   const description = bug.description
     ? stripHtmlToText(bug.description)
     : undefined;
   const repro = bug.reproSteps ? stripHtmlToText(bug.reproSteps) : undefined;
   const summarySource = repro || description;
   return {
+    description,
+    reproSteps: repro,
     summary: summarySource ? truncate(summarySource, 600) : undefined,
+  };
+}
+
+function buildBugResponse(bug: {
+  id: number;
+  title: string;
+  state?: string;
+  createdDate?: string;
+  assignedTo?: string;
+  areaPath?: string;
+  iterationPath?: string;
+  tags?: string;
+  webUrl?: string;
+  description?: string;
+  reproSteps?: string;
+}) {
+  const { summary, description, reproSteps } = buildBugText(bug);
+
+  return {
+    id: bug.id,
+    title: bug.title,
+    state: bug.state,
+    createdDate: bug.createdDate,
+    assignedTo: bug.assignedTo,
+    areaPath: bug.areaPath,
+    iterationPath: bug.iterationPath,
+    tags: bug.tags,
+    webUrl: bug.webUrl,
+    summary,
+    description,
+    reproSteps,
+    aiAnalysis: undefined as any,
+  };
+}
+
+async function buildAiAnalysisForBug(params: {
+  bug: {
+    id: number;
+    title: string;
+    description?: string;
+    reproSteps?: string;
+  };
+  cfg: ReturnType<typeof loadConfig>;
+}) {
+  const bugDescription = params.bug.description
+    ? stripHtmlToText(params.bug.description)
+    : undefined;
+  const reproSteps = params.bug.reproSteps
+    ? stripHtmlToText(params.bug.reproSteps)
+    : undefined;
+  const bugContextText = [params.bug.title, bugDescription, reproSteps]
+    .filter(Boolean)
+    .join("\n\n");
+
+  const [commits, repoContext] = await Promise.all([
+    fetchRecentCommits({
+      repo: params.cfg.githubRepo,
+      token: params.cfg.githubToken,
+      branch: params.cfg.githubRepoBranch,
+      count: Math.min(params.cfg.githubCommits, 12),
+    }),
+    fetchGitHubRepoContext({
+      repo: params.cfg.githubRepo,
+      token: params.cfg.githubToken,
+      branch: params.cfg.githubRepoBranch,
+      bugText: bugContextText,
+      maxFiles: 4,
+      maxChars: 6000,
+    }),
+  ]);
+
+  const fileSections = repoContext
+    ? (repoContext.match(/(^|\n)File:\s/g) ?? []).length
+    : 0;
+  const chars = repoContext?.length ?? 0;
+  console.log(
+    `[AI][github-context] repo=${params.cfg.githubRepo} branch=${params.cfg.githubRepoBranch} files=${fileSections} chars=${chars}`,
+  );
+
+  const aiResult = await analyzeWithAI({
+    bugTitle: params.bug.title,
+    bugDescription,
+    reproSteps,
+    repoContext,
+    repoBranch: params.cfg.githubRepoBranch,
+    recentCommits: commits.slice(0, 12).map((c) => ({
+      sha: c.sha,
+      message: c.message,
+      files: c.files.map((f) => f.filename),
+    })),
+    anthropicKey: params.cfg.anthropicKey,
+    anthropicModel: params.cfg.anthropicModel,
+  });
+
+  const enrichedSuspects = aiResult.suspectCommits
+    .filter((shaPrefix) => shaPrefix && shaPrefix.trim().length > 0)
+    .map((shaPrefix) => {
+      const commit = commits.find((c) =>
+        c.sha.toLowerCase().startsWith(shaPrefix.toLowerCase().trim()),
+      );
+      return {
+        sha: shaPrefix.trim(),
+        url: commit?.htmlUrl,
+      };
+    })
+    .filter((c) => c.sha.length >= 7);
+
+  return {
+    ...aiResult,
+    suspectCommits: enrichedSuspects,
   };
 }
 
@@ -33,12 +145,6 @@ app.get("/api/bugs", async (req, res) => {
     const bugIdParam =
       typeof req.query.bugId === "string" ? req.query.bugId : undefined;
     const bugId = bugIdParam ? Number(bugIdParam) : undefined;
-
-    const commits = await fetchRecentCommits({
-      repo: cfg.githubRepo,
-      token: cfg.githubToken,
-      count: cfg.githubCommits,
-    });
 
     const bugs = Number.isFinite(bugId)
       ? await fetchBugById({
@@ -57,74 +163,46 @@ app.get("/api/bugs", async (req, res) => {
           areaPath: cfg.adoAreaPath,
         });
 
-    const response = bugs.map((bug) => {
-      const { summary } = buildBugText(bug);
-
-      return {
-        id: bug.id,
-        title: bug.title,
-        state: bug.state,
-        createdDate: bug.createdDate,
-        assignedTo: bug.assignedTo,
-        areaPath: bug.areaPath,
-        tags: bug.tags,
-        webUrl: bug.webUrl,
-        summary,
-        aiAnalysis: undefined as any,
-      };
-    });
-
-    // If AI is enabled and we have a single bug query, run AI analysis
-    if (cfg.aiEnabled && bugs.length === 1) {
-      try {
-        const bug = bugs[0];
-        const aiResult = await analyzeWithAI({
-          bugTitle: bug.title,
-          bugDescription: bug.description
-            ? stripHtmlToText(bug.description)
-            : undefined,
-          reproSteps: bug.reproSteps
-            ? stripHtmlToText(bug.reproSteps)
-            : undefined,
-          recentCommits: commits.slice(0, 30).map((c) => ({
-            sha: c.sha,
-            message: c.message,
-            files: c.files.map((f) => f.filename),
-          })),
-          apiKey: cfg.aiApiKey,
-          useOllama: cfg.useOllama,
-          ollamaModel: cfg.ollamaModel,
-          ollamaBaseUrl: cfg.ollamaBaseUrl,
-        });
-
-        console.log("🚀 ~ aiResult:", aiResult);
-
-        // Enrich AI suspect commits with URLs
-        const enrichedSuspects = aiResult.suspectCommits
-          .filter((shaPrefix) => shaPrefix && shaPrefix.trim().length > 0)
-          .map((shaPrefix) => {
-            const commit = commits.find((c) =>
-              c.sha.toLowerCase().startsWith(shaPrefix.toLowerCase().trim()),
-            );
-            return {
-              sha: shaPrefix.trim(),
-              url: commit?.htmlUrl,
-            };
-          })
-          .filter((c) => c.sha.length >= 7);
-
-        response[0].aiAnalysis = {
-          ...aiResult,
-          suspectCommits: enrichedSuspects,
-        };
-      } catch (err) {
-        console.error("AI analysis failed:", err);
-      }
-    }
+    const response = bugs.map(buildBugResponse);
 
     res.json({
       generatedAt: new Date().toISOString(),
       bugs: response,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.get("/api/bugs/:bugId/analysis", async (req, res) => {
+  try {
+    const cfg = loadConfig();
+    const bugId = Number(req.params.bugId);
+
+    if (!Number.isFinite(bugId)) {
+      res.status(400).json({ error: "Invalid bug id" });
+      return;
+    }
+
+    const bug = await fetchBugById({
+      adoOrg: cfg.adoOrg,
+      project: cfg.adoProject,
+      pat: cfg.adoPat,
+      id: bugId,
+    });
+
+    if (!bug) {
+      res.status(404).json({ error: `Bug ${bugId} not found` });
+      return;
+    }
+
+    const aiAnalysis = await buildAiAnalysisForBug({ bug, cfg });
+
+    res.json({
+      generatedAt: new Date().toISOString(),
+      bugId,
+      aiAnalysis,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

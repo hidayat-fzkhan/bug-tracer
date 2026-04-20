@@ -17,7 +17,7 @@ export function AIAnalysis({ analysis }: AIAnalysisProps) {
           <Stack spacing={1.5}>
             <Box>
               <Typography variant="caption" fontWeight={600}>
-                Summary
+                Why Is This Bug Happening?
               </Typography>
               <Typography variant="body2">{analysis.summary}</Typography>
             </Box>
@@ -25,7 +25,7 @@ export function AIAnalysis({ analysis }: AIAnalysisProps) {
             {analysis.likelyCause && (
               <Box>
                 <Typography variant="caption" fontWeight={600}>
-                  Likely Cause
+                  What Could Be The Issue?
                 </Typography>
                 <Typography variant="body2">{analysis.likelyCause}</Typography>
               </Box>
@@ -34,7 +34,7 @@ export function AIAnalysis({ analysis }: AIAnalysisProps) {
             {analysis.suspectCommits.length > 0 && (
               <Box>
                 <Typography variant="caption" fontWeight={600}>
-                  AI-Identified Suspect Commits
+                  Related Recent Commit(s)
                 </Typography>
                 <Stack spacing={0.5}>
                   {analysis.suspectCommits.map((commit, idx) => (
@@ -55,12 +55,27 @@ export function AIAnalysis({ analysis }: AIAnalysisProps) {
             {analysis.recommendations.length > 0 && (
               <Box>
                 <Typography variant="caption" fontWeight={600}>
-                  Recommendations
+                  How To Fix It
                 </Typography>
                 <Stack component="ul" spacing={0.5} sx={{ m: 0, pl: 2 }}>
                   {analysis.recommendations.map((rec, i) => (
                     <Typography key={i} variant="body2" component="li">
                       {rec}
+                    </Typography>
+                  ))}
+                </Stack>
+              </Box>
+            )}
+
+            {(analysis.importantPoints?.length ?? 0) > 0 && (
+              <Box>
+                <Typography variant="caption" fontWeight={600}>
+                  Other Important Points
+                </Typography>
+                <Stack component="ul" spacing={0.5} sx={{ m: 0, pl: 2 }}>
+                  {analysis.importantPoints?.map((point, i) => (
+                    <Typography key={i} variant="body2" component="li">
+                      {point}
                     </Typography>
                   ))}
                 </Stack>

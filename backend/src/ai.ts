@@ -1,19 +1,60 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages.js";
 
+const MAX_BUG_FIELD_CHARS = 600;
+const MAX_REPO_CONTEXT_CHARS = 6000;
+const MAX_COMMITS = 12;
+const MAX_FILES_PER_COMMIT = 3;
+const MAX_COMMIT_MESSAGE_CHARS = 140;
+
+function truncate(input: string, maxChars: number): string {
+  if (input.length <= maxChars) {
+    return input;
+  }
+
+  return `${input.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
+}
+
+function compactText(input: string | undefined, maxChars: number): string | undefined {
+  if (!input) {
+    return undefined;
+  }
+
+  const compact = input.replaceAll(/\s+/g, " ").trim();
+  return compact ? truncate(compact, maxChars) : undefined;
+}
+
+function compactRepoContext(input: string | undefined): string | undefined {
+  if (!input) {
+    return undefined;
+  }
+
+  const sections = input
+    .split(/\n\n---\n\n/g)
+    .slice(0, 4)
+    .map((section) => section.trim())
+    .filter(Boolean);
+
+  if (sections.length === 0) {
+    return undefined;
+  }
+
+  return truncate(sections.join("\n\n---\n\n"), MAX_REPO_CONTEXT_CHARS);
+}
+
 export type AIAnalysisParams = {
   bugTitle: string;
   bugDescription?: string;
   reproSteps?: string;
+  repoContext?: string;
+  repoBranch: string;
   recentCommits: Array<{
     sha: string;
     message: string;
     files: string[];
   }>;
-  apiKey?: string;
-  useOllama?: boolean;
-  ollamaModel?: string;
-  ollamaBaseUrl?: string;
+  anthropicKey: string;
+  anthropicModel: string;
 };
 
 export type AIAnalysisResult = {
@@ -21,98 +62,65 @@ export type AIAnalysisResult = {
   likelyCause?: string;
   suspectCommits: string[];
   recommendations: string[];
+  importantPoints?: string[];
 };
 
-async function analyzeWithOllama(params: AIAnalysisParams, prompt: string): Promise<AIAnalysisResult> {
-  const baseUrl = params.ollamaBaseUrl || "http://localhost:11434";
-  const model = params.ollamaModel || "llama3";
-
-  const response = await fetch(`${baseUrl}/api/generate`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model,
-      prompt,
-      stream: false
-    })
-  });
-
-  if (!response.ok) {
-    throw new Error(`Ollama request failed: ${response.status}`);
-  }
-
-  const data = (await response.json()) as { response?: string };
-  const text = data.response || "";
-
-  // Try to parse JSON response
-  try {
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const result = JSON.parse(jsonMatch[0]) as AIAnalysisResult;
-      return result;
-    }
-  } catch {
-    // Fallback if JSON parsing fails
-  }
-
-  return {
-    summary: text,
-    suspectCommits: [],
-    recommendations: []
-  };
-}
-
-export async function analyzeWithAI(params: AIAnalysisParams): Promise<AIAnalysisResult> {
+export async function analyzeWithAI(
+  params: AIAnalysisParams,
+): Promise<AIAnalysisResult> {
   const commitsText = params.recentCommits
-    .slice(0, 30)
-    .map((c) => `${c.sha.slice(0, 8)}: ${c.message}\nFiles: ${c.files.slice(0, 5).join(", ")}`)
+    .slice(0, MAX_COMMITS)
+    .map(
+      (c) =>
+        `${c.sha.slice(0, 8)} | ${truncate(c.message.replaceAll(/\s+/g, " ").trim(), MAX_COMMIT_MESSAGE_CHARS)} | ${c.files.slice(0, MAX_FILES_PER_COMMIT).join(", ")}`,
+    )
     .join("\n\n");
 
-  const prompt = `You are a senior software engineer analyzing a bug report and recent code changes.
+  const bugDescription = compactText(params.bugDescription, MAX_BUG_FIELD_CHARS);
+  const reproSteps = compactText(params.reproSteps, MAX_BUG_FIELD_CHARS);
+  const repoContext = compactRepoContext(params.repoContext);
 
-Bug Report:
-Title: ${params.bugTitle}
-${params.bugDescription ? `Description: ${params.bugDescription}` : ""}
-${params.reproSteps ? `Repro Steps: ${params.reproSteps}` : ""}
+  const systemPrompt = [
+    "You analyze production bugs using only the supplied bug details, recent commits, and repo snippets.",
+    "Return concise JSON only.",
+    "Prefer concrete evidence from the provided commits and snippets.",
+    "Do not speculate beyond the supplied context.",
+  ].join(" ");
 
-Recent Commits (last 30):
-${commitsText}
+  const prompt = [
+    `Bug title: ${params.bugTitle}`,
+    bugDescription ? `Bug description: ${bugDescription}` : undefined,
+    reproSteps ? `Repro steps: ${reproSteps}` : undefined,
+    `Branch: ${params.repoBranch}`,
+    `Recent commits:\n${commitsText || "None provided"}`,
+    repoContext ? `Relevant repo snippets:\n${repoContext}` : "Relevant repo snippets: None provided",
+    [
+      "Return valid JSON with this exact shape:",
+      '{"summary":"","likelyCause":"","suspectCommits":["sha-prefix"],"recommendations":["action"],"importantPoints":["point"]}',
+      "Rules:",
+      "- Keep summary to 2 sentences max.",
+      "- suspectCommits must contain at most 3 SHA prefixes from the provided commit list.",
+      "- recommendations must contain at most 3 short, concrete actions.",
+      "- importantPoints must contain at most 3 short bullets.",
+    ].join("\n"),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 
-Based on this information:
-1. Provide a brief summary of what likely caused this bug
-2. Identify the most suspect commits (by SHA prefix)
-3. Give specific recommendations for investigation
-
-Format your response as JSON:
-{
-  "summary": "One paragraph analysis",
-  "likelyCause": "Most likely root cause",
-  "suspectCommits": ["sha1", "sha2"],
-  "recommendations": ["rec1", "rec2"]
-}`;
-
-  // Use Ollama if configured
-  if (params.useOllama) {
-    return analyzeWithOllama(params, prompt);
-  }
-
-  // Use Anthropic Claude
-  if (!params.apiKey) {
-    throw new Error("AI_API_KEY required for Anthropic analysis");
-  }
-
-  const anthropic = new Anthropic({ apiKey: params.apiKey });
+  const anthropic = new Anthropic({ apiKey: params.anthropicKey });
   const messages: MessageParam[] = [
     {
       role: "user",
-      content: prompt
-    }
+      content: prompt,
+    },
   ];
+  console.log("🚀 ~ analyzeWithAI ~ messages:", messages)
 
   const response = await anthropic.messages.create({
-    model: "claude-3-5-sonnet-20241022",
-    max_tokens: 2000,
-    messages
+    model: params.anthropicModel,
+    system: systemPrompt,
+    max_tokens: 900,
+    messages,
   });
 
   const content = response.content[0];
@@ -121,14 +129,14 @@ Format your response as JSON:
   }
 
   try {
-    const result = JSON.parse(content.text) as AIAnalysisResult;
-    return result;
+    return JSON.parse(content.text) as AIAnalysisResult;
   } catch {
     // Fallback if JSON parsing fails
     return {
       summary: content.text,
       suspectCommits: [],
-      recommendations: []
+      recommendations: [],
+      importantPoints: [],
     };
   }
 }

@@ -4,9 +4,10 @@ import { formatDate } from "../../utils/formatters";
 
 type BugDetailsProps = {
   bug: ApiBug;
+  isDetailed?: boolean;
 };
 
-export function BugDetails({ bug }: BugDetailsProps) {
+export function BugDetails({ bug, isDetailed = false }: BugDetailsProps) {
   return (
     <>
       <Stack direction={{ xs: "column", md: "row" }} spacing={1} alignItems="baseline">
@@ -27,7 +28,14 @@ export function BugDetails({ bug }: BugDetailsProps) {
         {bug.areaPath && (
           <Typography variant="body2">Area: {bug.areaPath}</Typography>
         )}
+        {bug.iterationPath && (
+          <Typography variant="body2">Iteration: {bug.iterationPath}</Typography>
+        )}
       </Stack>
+
+      {bug.tags && (
+        <Typography variant="body2">Tags: {bug.tags}</Typography>
+      )}
 
       {bug.webUrl && (
         <Typography variant="body2">
@@ -37,13 +45,35 @@ export function BugDetails({ bug }: BugDetailsProps) {
         </Typography>
       )}
 
-      {bug.summary && (
+      {bug.summary && !isDetailed && (
         <>
           <Typography variant="h5" sx={{ whiteSpace: "pre-line" }}>
             Summary
           </Typography>
           <Typography variant="body1" sx={{ whiteSpace: "pre-line" }}>
             {bug.summary}
+          </Typography>
+        </>
+      )}
+
+      {isDetailed && bug.description && (
+        <>
+          <Typography variant="h5" sx={{ whiteSpace: "pre-line" }}>
+            Bug Description
+          </Typography>
+          <Typography variant="body1" sx={{ whiteSpace: "pre-line" }}>
+            {bug.description}
+          </Typography>
+        </>
+      )}
+
+      {isDetailed && bug.reproSteps && (
+        <>
+          <Typography variant="h5" sx={{ whiteSpace: "pre-line" }}>
+            Repro Steps / Additional Azure Details
+          </Typography>
+          <Typography variant="body1" sx={{ whiteSpace: "pre-line" }}>
+            {bug.reproSteps}
           </Typography>
         </>
       )}

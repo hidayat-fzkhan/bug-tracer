@@ -9,14 +9,12 @@ export type Config = {
   adoStates: string[];
   adoAreaPath?: string;
   githubRepo: string;
-  githubToken: string;
+  githubRepoBranch: string;
+  githubToken?: string;
   githubCommits: number;
-  rankMinScore: number;
-  aiApiKey?: string;
+  anthropicKey: string;
+  anthropicModel: string;
   aiEnabled: boolean;
-  useOllama: boolean;
-  ollamaModel?: string;
-  ollamaBaseUrl?: string;
 };
 
 function requireEnv(name: string): string {
@@ -56,12 +54,10 @@ export function loadConfig(partial?: Partial<Config>): Config {
   const adoPat = partial?.adoPat ?? requireEnv("ADO_PAT");
 
   const githubRepo = partial?.githubRepo ?? requireEnv("GITHUB_REPO");
-  const githubToken = partial?.githubToken ?? requireEnv("GITHUB_TOKEN");
-
-  const aiApiKey = partial?.aiApiKey ?? envOptional("AI_API_KEY");
-  const useOllama = partial?.useOllama ?? (envOptional("USE_OLLAMA") === "true");
-  const ollamaModel = partial?.ollamaModel ?? envOptional("OLLAMA_MODEL");
-  const ollamaBaseUrl = partial?.ollamaBaseUrl ?? envOptional("OLLAMA_BASE_URL");
+  const githubRepoBranch = partial?.githubRepoBranch ?? requireEnv("GITHUB_REPO_BRANCH");
+  const githubToken = partial?.githubToken ?? envOptional("GITHUB_TOKEN");
+  const anthropicKey = partial?.anthropicKey ?? requireEnv("ANTHROPIC_KEY");
+  const anthropicModel = partial?.anthropicModel ?? envOptional("ANTHROPIC_MODEL") ?? "claude-3-7-sonnet-latest";
 
   return {
     adoOrg,
@@ -72,13 +68,11 @@ export function loadConfig(partial?: Partial<Config>): Config {
     adoStates: partial?.adoStates ?? envCsv("ADO_STATES", ["New", "Active"]),
     adoAreaPath: partial?.adoAreaPath ?? envOptional("ADO_AREA_PATH"),
     githubRepo,
+    githubRepoBranch,
     githubToken,
     githubCommits: partial?.githubCommits ?? envNumber("GITHUB_COMMITS", 50),
-    rankMinScore: partial?.rankMinScore ?? envNumber("RANK_MIN_SCORE", 0.08),
-    aiApiKey,
-    aiEnabled: useOllama || !!aiApiKey,
-    useOllama,
-    ollamaModel,
-    ollamaBaseUrl
+    anthropicKey,
+    anthropicModel,
+    aiEnabled: true
   };
 }
