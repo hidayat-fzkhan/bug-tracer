@@ -1,6 +1,10 @@
 import { Octokit } from "@octokit/rest";
 import type { GitCommit } from "./types.js";
 
+const MAX_CONTEXT_BLOB_CANDIDATES = 48;
+const MAX_CONTEXT_BLOB_SIZE = 120_000;
+const BLOB_FETCH_CONCURRENCY = 8;
+
 export function parseRepo(repo: string): { owner: string; repo: string } {
   const trimmed = repo.trim().replace(/\.git$/, "");
   const normalized = trimmed.startsWith("http://") || trimmed.startsWith("https://")
@@ -73,9 +77,21 @@ function extractKeywords(text: string): string[] {
   return [...new Set(tokens)].slice(0, 30);
 }
 
-function scorePath(filePath: string, keywords: string[]): number {
+function extractPathHints(text: string): string[] {
+  const pathMatches = text.match(/[A-Za-z0-9_./-]+\.(ts|tsx|js|jsx|json|md|yml|yaml|css|scss|html|sql|py|java|go|cs)/g) ?? [];
+  return [...new Set(pathMatches.map((match) => match.toLowerCase()))].slice(0, 20);
+}
+
+function scorePath(filePath: string, keywords: string[], pathHints: string[]): number {
   const lower = filePath.toLowerCase();
   let score = 0;
+
+  for (const hint of pathHints) {
+    if (lower.includes(hint)) {
+      score += 8;
+    }
+  }
+
   for (const keyword of keywords) {
     if (lower.includes(keyword)) score += 2;
   }
@@ -114,6 +130,27 @@ function buildSnippet(content: string, keywords: string[], maxChars: number): st
   });
 
   return blocks.join("\n...\n").slice(0, maxChars);
+}
+
+async function mapWithConcurrency<TInput, TOutput>(params: {
+  items: TInput[];
+  concurrency: number;
+  mapper: (item: TInput) => Promise<TOutput>;
+}): Promise<TOutput[]> {
+  const results: TOutput[] = [];
+  let currentIndex = 0;
+
+  async function worker() {
+    while (currentIndex < params.items.length) {
+      const index = currentIndex;
+      currentIndex += 1;
+      results[index] = await params.mapper(params.items[index]);
+    }
+  }
+
+  const workerCount = Math.max(1, Math.min(params.concurrency, params.items.length));
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return results;
 }
 
 export async function fetchRecentCommits(params: {
@@ -166,6 +203,7 @@ export async function fetchGitHubRepoContext(params: {
   const { owner, repo } = parseRepo(params.repo);
   const octokit = createOctokit(params.token);
   const keywords = extractKeywords(params.bugText);
+  const pathHints = extractPathHints(params.bugText);
   if (keywords.length === 0) return undefined;
 
   const branchResp = await octokit.repos.getBranch({
@@ -185,33 +223,42 @@ export async function fetchGitHubRepoContext(params: {
     .filter((entry) => entry.type === "blob" && !!entry.path && !!entry.sha)
     .filter((entry) => {
       const ext = entry.path ? entry.path.slice(entry.path.lastIndexOf(".")).toLowerCase() : "";
-      return FILE_EXT_ALLOW.has(ext) && (entry.size ?? 0) <= 200_000;
+      return FILE_EXT_ALLOW.has(ext) && (entry.size ?? 0) <= MAX_CONTEXT_BLOB_SIZE;
     })
-    .sort((left, right) => scorePath(right.path ?? "", keywords) - scorePath(left.path ?? "", keywords))
-    .slice(0, 200);
+    .sort(
+      (left, right) => scorePath(right.path ?? "", keywords, pathHints) - scorePath(left.path ?? "", keywords, pathHints),
+    )
+    .slice(0, MAX_CONTEXT_BLOB_CANDIDATES);
 
-  const scored: Array<{ path: string; score: number; content: string }> = [];
-  for (const blob of blobs) {
-    try {
-      const blobResp = await octokit.git.getBlob({
-        owner,
-        repo,
-        file_sha: blob.sha as string
-      });
+  const scored = (
+    await mapWithConcurrency({
+      items: blobs,
+      concurrency: BLOB_FETCH_CONCURRENCY,
+      mapper: async (blob) => {
+        try {
+          const blobResp = await octokit.git.getBlob({
+            owner,
+            repo,
+            file_sha: blob.sha as string,
+          });
 
-      const content = Buffer.from(blobResp.data.content, "base64").toString("utf8");
-      const score = scorePath(blob.path ?? "", keywords) + scoreContent(content, keywords);
-      if (score > 0) {
-        scored.push({
-          path: blob.path as string,
-          score,
-          content
-        });
-      }
-    } catch {
-      // Ignore unreadable blobs.
-    }
-  }
+          const content = Buffer.from(blobResp.data.content, "base64").toString("utf8");
+          const score = scorePath(blob.path ?? "", keywords, pathHints) + scoreContent(content, keywords);
+          if (score <= 0) {
+            return undefined;
+          }
+
+          return {
+            path: blob.path as string,
+            score,
+            content,
+          };
+        } catch {
+          return undefined;
+        }
+      },
+    })
+  ).filter((item): item is { path: string; score: number; content: string } => Boolean(item));
 
   if (scored.length === 0) return undefined;
 

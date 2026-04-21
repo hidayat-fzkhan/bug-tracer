@@ -57,7 +57,7 @@ export function loadConfig(partial?: Partial<Config>): Config {
   const githubRepoBranch = partial?.githubRepoBranch ?? requireEnv("GITHUB_REPO_BRANCH");
   const githubToken = partial?.githubToken ?? envOptional("GITHUB_TOKEN");
   const anthropicKey = partial?.anthropicKey ?? requireEnv("ANTHROPIC_KEY");
-  const anthropicModel = partial?.anthropicModel ?? envOptional("ANTHROPIC_MODEL") ?? "claude-3-7-sonnet-latest";
+  const anthropicModel = partial?.anthropicModel ?? envOptional("ANTHROPIC_MODEL") ?? "claude-sonnet-4-6";
 
   return {
     adoOrg,

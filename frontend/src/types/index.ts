@@ -1,16 +1,25 @@
-export type ApiBugAnalysis = {
-  summary: string;
+export type TicketCategory = "bugs" | "user-stories";
+
+export type ApiTicketAnalysis = {
+  analysisType: "bug" | "user-story";
+  status: "ready" | "not-enough-data";
+  summary: unknown;
   likelyCause?: string;
+  implementationApproach?: string;
   suspectCommits: Array<{
     sha: string;
     url?: string;
   }>;
   recommendations: string[];
   importantPoints?: string[];
+  impactedAreas?: string[];
+  dependencies?: string[];
 };
 
-export type ApiBug = {
+export type ApiTicket = {
   id: number;
+  category: TicketCategory;
+  workItemType: string;
   title: string;
   state?: string;
   createdDate?: string;
@@ -22,16 +31,17 @@ export type ApiBug = {
   summary?: string;
   description?: string;
   reproSteps?: string;
-  aiAnalysis?: ApiBugAnalysis;
+  acceptanceCriteria?: string;
+  aiAnalysis?: ApiTicketAnalysis;
 };
 
-export type ApiResponse = {
+export type ApiTicketListResponse = {
   generatedAt: string;
-  bugs: ApiBug[];
+  tickets: ApiTicket[];
 };
 
-export type ApiBugAnalysisResponse = {
+export type ApiTicketAnalysisResponse = {
   generatedAt: string;
-  bugId: number;
-  aiAnalysis: ApiBugAnalysis;
+  ticketId: number;
+  aiAnalysis: ApiTicketAnalysis;
 };

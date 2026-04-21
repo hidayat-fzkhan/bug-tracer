@@ -1,9 +1,9 @@
 import { Stack } from "@mui/material";
-import type { ApiBug } from "../../types";
+import type { ApiTicket } from "../../types";
 import { BugCard } from "./BugCard";
 
 type BugListProps = Readonly<{
-  bugs: ApiBug[];
+  bugs: ApiTicket[];
   onOpenBug: (bugId: number) => void;
   selectedBugId?: number;
   analysisLoading?: boolean;

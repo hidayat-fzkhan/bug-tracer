@@ -5,12 +5,14 @@ import { Header } from "./Header";
 type LayoutProps = {
   children: ReactNode;
   loading?: boolean;
+  currentPath: string;
+  onNavigate: (path: string) => void;
 };
 
-export function Layout({ children, loading }: LayoutProps) {
+export function Layout({ children, loading, currentPath, onNavigate }: LayoutProps) {
   return (
     <Box>
-      <Header />
+      <Header currentPath={currentPath} onNavigate={onNavigate} />
       {loading && <LinearProgress color="secondary" />}
       <Container maxWidth="lg" sx={{ py: 4 }}>
         {children}

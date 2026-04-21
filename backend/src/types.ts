@@ -1,7 +1,13 @@
 export type AdoWorkItemFields = Record<string, unknown>;
 
-export type AdoBug = {
+export type WorkItemCategory = "bugs" | "user-stories";
+
+export type WorkItemAnalysisType = "bug" | "user-story";
+
+export type AdoWorkItem = {
   id: number;
+  category: WorkItemCategory;
+  workItemType: string;
   title: string;
   state?: string;
   createdDate?: string;
@@ -11,6 +17,7 @@ export type AdoBug = {
   tags?: string;
   description?: string;
   reproSteps?: string;
+  acceptanceCriteria?: string;
   url?: string;
   webUrl?: string;
 };

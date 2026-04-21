@@ -2,6 +2,8 @@ import { Box, Button, TextField } from "@mui/material";
 import { useMemo } from "react";
 
 type SearchBarProps = {
+  label: string;
+  placeholder: string;
   query: string;
   loading: boolean;
   onQueryChange: (query: string) => void;
@@ -9,7 +11,7 @@ type SearchBarProps = {
   onStop: () => void;
 };
 
-export function SearchBar({ query, loading, onQueryChange, onSearch, onStop }: SearchBarProps) {
+export function SearchBar({ label, placeholder, query, loading, onQueryChange, onSearch, onStop }: SearchBarProps) {
   const hasQuery = useMemo(() => query.trim().length > 0, [query]);
 
   const handleSubmit = (event: React.FormEvent) => {
@@ -25,10 +27,10 @@ export function SearchBar({ query, loading, onQueryChange, onSearch, onStop }: S
   return (
     <Box component="form" onSubmit={handleSubmit} sx={{ display: "flex", gap: 2 }}>
       <TextField
-        label="Search by Bug ID"
+        label={label}
         value={query}
         onChange={(event) => onQueryChange(event.target.value)}
-        placeholder="e.g. 2689652"
+        placeholder={placeholder}
         size="small"
         fullWidth
       />

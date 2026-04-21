@@ -1,20 +1,24 @@
 import { useCallback, useRef, useState } from "react";
-import { fetchBugAnalysis, fetchBugs } from "../services/api";
-import type { ApiBug } from "../types";
+import { fetchTicketAnalysis, fetchTickets } from "../services/api";
+import type { ApiTicket, TicketCategory } from "../types";
 
-export function useBugs() {
+export function useTickets(category: TicketCategory | null) {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
-  const [bugs, setBugs] = useState<ApiBug[]>([]);
+  const [tickets, setTickets] = useState<ApiTicket[]>([]);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
-  const [selectedBugId, setSelectedBugId] = useState<string | null>(null);
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const analysisAbortControllerRef = useRef<AbortController | null>(null);
 
-  const loadAnalysis = useCallback(async (bugId: number) => {
+  const loadAnalysis = useCallback(async (ticketId: number) => {
+    if (!category) {
+      return;
+    }
+
     if (analysisAbortControllerRef.current) {
       analysisAbortControllerRef.current.abort();
     }
@@ -25,15 +29,15 @@ export function useBugs() {
     setAnalysisError(null);
 
     try {
-      const data = await fetchBugAnalysis(bugId, controller.signal);
-      setBugs((currentBugs) =>
-        currentBugs.map((bug) =>
-          bug.id === data.bugId
+      const data = await fetchTicketAnalysis(category, ticketId, controller.signal);
+      setTickets((currentTickets) =>
+        currentTickets.map((ticket) =>
+          ticket.id === data.ticketId
             ? {
-                ...bug,
+                ...ticket,
                 aiAnalysis: data.aiAnalysis,
               }
-            : bug,
+            : ticket,
         ),
       );
     } catch (err) {
@@ -48,9 +52,31 @@ export function useBugs() {
         analysisAbortControllerRef.current = null;
       }
     }
+  }, [category]);
+
+  const reset = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    if (analysisAbortControllerRef.current) {
+      analysisAbortControllerRef.current.abort();
+    }
+
+    setLoading(false);
+    setError(null);
+    setAnalysisLoading(false);
+    setAnalysisError(null);
+    setTickets([]);
+    setGeneratedAt(null);
+    setSelectedTicketId(null);
   }, []);
 
-  const load = useCallback(async (bugId?: string) => {
+  const load = useCallback(async (ticketId?: string) => {
+    if (!category) {
+      reset();
+      return;
+    }
+
     // Cancel any ongoing request
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -65,13 +91,13 @@ export function useBugs() {
     setError(null);
     setAnalysisError(null);
     setAnalysisLoading(false);
-    setSelectedBugId(bugId ?? null);
+    setSelectedTicketId(ticketId ?? null);
     try {
-      const data = await fetchBugs(bugId, controller.signal);
-      setBugs(data.bugs);
+      const data = await fetchTickets(category, ticketId, controller.signal);
+      setTickets(data.tickets);
       setGeneratedAt(data.generatedAt);
-      if (bugId && data.bugs.length === 1) {
-        void loadAnalysis(data.bugs[0].id);
+      if (ticketId && data.tickets.length === 1) {
+        void loadAnalysis(data.tickets[0].id);
       }
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
@@ -85,7 +111,7 @@ export function useBugs() {
         abortControllerRef.current = null;
       }
     }
-  }, [loadAnalysis]);
+  }, [category, loadAnalysis, reset]);
 
   const handleStop = () => {
     if (abortControllerRef.current) {
@@ -103,10 +129,11 @@ export function useBugs() {
     error,
     analysisLoading,
     analysisError,
-    bugs,
-    selectedBugId,
+    tickets,
+    selectedTicketId,
     generatedAt,
     load,
+    reset,
     handleStop,
   };
 }

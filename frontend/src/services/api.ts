@@ -1,31 +1,38 @@
-import type { ApiBugAnalysisResponse, ApiResponse } from "../types";
+import type { ApiTicketAnalysisResponse, ApiTicketListResponse, TicketCategory } from "../types";
 
 function getApiBase(): string {
   return import.meta.env.VITE_API_BASE || "";
 }
 
-export async function fetchBugs(bugId?: string, signal?: AbortSignal): Promise<ApiResponse> {
+export async function fetchTickets(
+  category: TicketCategory,
+  ticketId?: string,
+  signal?: AbortSignal,
+): Promise<ApiTicketListResponse> {
   const base = getApiBase();
-  const path = bugId ? `/api/bugs?bugId=${encodeURIComponent(bugId)}` : "/api/bugs";
+  const path = ticketId
+    ? `/api/${category}?ticketId=${encodeURIComponent(ticketId)}`
+    : `/api/${category}`;
   const url = `${base}${path}`;
   const res = await fetch(url, { signal });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(text || `Request failed: ${res.status}`);
   }
-  return (await res.json()) as ApiResponse;
+  return (await res.json()) as ApiTicketListResponse;
 }
 
-export async function fetchBugAnalysis(
-  bugId: number,
+export async function fetchTicketAnalysis(
+  category: TicketCategory,
+  ticketId: number,
   signal?: AbortSignal,
-): Promise<ApiBugAnalysisResponse> {
+): Promise<ApiTicketAnalysisResponse> {
   const base = getApiBase();
-  const url = `${base}/api/bugs/${bugId}/analysis`;
+  const url = `${base}/api/${category}/${ticketId}/analysis`;
   const res = await fetch(url, { signal });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(text || `Request failed: ${res.status}`);
   }
-  return (await res.json()) as ApiBugAnalysisResponse;
+  return (await res.json()) as ApiTicketAnalysisResponse;
 }

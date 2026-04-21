@@ -1,11 +1,14 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages.js";
+import type { WorkItemAnalysisType } from "./types.js";
 
 const MAX_BUG_FIELD_CHARS = 600;
 const MAX_REPO_CONTEXT_CHARS = 6000;
 const MAX_COMMITS = 12;
 const MAX_FILES_PER_COMMIT = 3;
 const MAX_COMMIT_MESSAGE_CHARS = 140;
+const MAX_OUTPUT_TOKENS_BUG = 900;
+const MAX_OUTPUT_TOKENS_USER_STORY = 1400;
 
 function truncate(input: string, maxChars: number): string {
   if (input.length <= maxChars) {
@@ -42,10 +45,83 @@ function compactRepoContext(input: string | undefined): string | undefined {
   return truncate(sections.join("\n\n---\n\n"), MAX_REPO_CONTEXT_CHARS);
 }
 
+function stripCodeFences(input: string): string {
+  const trimmed = input.trim();
+  const fencedMatch = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(trimmed);
+  return fencedMatch ? fencedMatch[1].trim() : trimmed;
+}
+
+function decodeJsonString(value: string): string {
+  try {
+    return JSON.parse(`"${value}"`) as string;
+  } catch {
+    return value;
+  }
+}
+
+function extractStringField(text: string, field: string): string | undefined {
+  const escapedField = field.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+  const match = new RegExp(String.raw`"${escapedField}"\s*:\s*"((?:\\.|[^"\\])*)"`).exec(text);
+  return match ? decodeJsonString(match[1]) : undefined;
+}
+
+function extractStringArrayField(text: string, field: string): string[] | undefined {
+  const escapedField = field.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+  const match = new RegExp(String.raw`"${escapedField}"\s*:\s*\[([\s\S]*?)\]`).exec(text);
+
+  if (!match) {
+    return undefined;
+  }
+
+  const items: string[] = [];
+  const itemPattern = /"((?:\\.|[^"\\])*)"/g;
+  let itemMatch = itemPattern.exec(match[1]);
+
+  while (itemMatch) {
+    items.push(decodeJsonString(itemMatch[1]));
+    itemMatch = itemPattern.exec(match[1]);
+  }
+
+  return items;
+}
+
+function recoverAnalysisResultFromText(
+  text: string,
+  analysisType: WorkItemAnalysisType,
+): Partial<AIAnalysisResult> | null {
+  const recovered: Partial<AIAnalysisResult> = {
+    analysisType: (extractStringField(text, "analysisType") as WorkItemAnalysisType | undefined) ?? analysisType,
+    status: (extractStringField(text, "status") as AIAnalysisResult["status"] | undefined) ?? "ready",
+    summary: extractStringField(text, "summary"),
+    likelyCause: extractStringField(text, "likelyCause"),
+    implementationApproach: extractStringField(text, "implementationApproach"),
+    suspectCommits: extractStringArrayField(text, "suspectCommits"),
+    recommendations: extractStringArrayField(text, "recommendations"),
+    importantPoints: extractStringArrayField(text, "importantPoints"),
+    impactedAreas: extractStringArrayField(text, "impactedAreas"),
+    dependencies: extractStringArrayField(text, "dependencies"),
+  };
+
+  const hasUsefulContent = Boolean(
+    recovered.summary
+      || recovered.likelyCause
+      || recovered.implementationApproach
+      || recovered.suspectCommits?.length
+      || recovered.recommendations?.length
+      || recovered.importantPoints?.length
+      || recovered.impactedAreas?.length
+      || recovered.dependencies?.length,
+  );
+
+  return hasUsefulContent ? recovered : null;
+}
+
 export type AIAnalysisParams = {
-  bugTitle: string;
-  bugDescription?: string;
+  analysisType: WorkItemAnalysisType;
+  ticketTitle: string;
+  ticketDescription?: string;
   reproSteps?: string;
+  acceptanceCriteria?: string;
   repoContext?: string;
   repoBranch: string;
   recentCommits: Array<{
@@ -58,12 +134,129 @@ export type AIAnalysisParams = {
 };
 
 export type AIAnalysisResult = {
+  analysisType: WorkItemAnalysisType;
+  status: "ready" | "not-enough-data";
   summary: string;
   likelyCause?: string;
+  implementationApproach?: string;
   suspectCommits: string[];
   recommendations: string[];
   importantPoints?: string[];
+  impactedAreas?: string[];
+  dependencies?: string[];
 };
+
+function buildBugPrompt(params: {
+  ticketTitle: string;
+  ticketDescription?: string;
+  reproSteps?: string;
+  repoBranch: string;
+  commitsText: string;
+  repoContext?: string;
+}): { systemPrompt: string; prompt: string } {
+  return {
+    systemPrompt: [
+      "You analyze production bugs using only the supplied ticket details, recent commits, and repo snippets.",
+      "Return concise JSON only.",
+      "Prefer concrete evidence from the provided commits and snippets.",
+      "Do not speculate beyond the supplied context.",
+    ].join(" "),
+    prompt: [
+      `Bug title: ${params.ticketTitle}`,
+      params.ticketDescription ? `Bug description: ${params.ticketDescription}` : undefined,
+      params.reproSteps ? `Repro steps: ${params.reproSteps}` : undefined,
+      `Branch: ${params.repoBranch}`,
+      `Recent commits:\n${params.commitsText || "None provided"}`,
+      params.repoContext ? `Relevant repo snippets:\n${params.repoContext}` : "Relevant repo snippets: None provided",
+      [
+        "Return valid JSON with this exact shape:",
+        '{"analysisType":"bug","status":"ready","summary":"","likelyCause":"","suspectCommits":["sha-prefix"],"recommendations":["action"],"importantPoints":["point"],"implementationApproach":"","impactedAreas":[],"dependencies":[]}',
+        "Rules:",
+        "- Keep summary to 2 sentences max.",
+        "- likelyCause should be one short paragraph.",
+        "- suspectCommits must contain at most 3 SHA prefixes from the provided commit list.",
+        "- recommendations must contain at most 3 short, concrete actions.",
+        "- importantPoints must contain at most 3 short bullets.",
+        "- Use empty strings or arrays for story-only fields.",
+      ].join("\n"),
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+  };
+}
+
+function buildUserStoryPrompt(params: {
+  ticketTitle: string;
+  ticketDescription?: string;
+  acceptanceCriteria?: string;
+  repoBranch: string;
+  commitsText: string;
+  repoContext?: string;
+}): { systemPrompt: string; prompt: string } {
+  return {
+    systemPrompt: [
+      "You analyze software user stories using only the supplied ticket details, recent commits, and repo snippets.",
+      "Return concise JSON only.",
+      "Focus on implementation approach, impacted areas, dependencies, and practical next steps.",
+      "Do not speculate beyond the supplied context.",
+    ].join(" "),
+    prompt: [
+      `User story title: ${params.ticketTitle}`,
+      params.ticketDescription ? `User story description: ${params.ticketDescription}` : undefined,
+      params.acceptanceCriteria ? `Acceptance criteria: ${params.acceptanceCriteria}` : undefined,
+      `Branch: ${params.repoBranch}`,
+      `Recent commits:\n${params.commitsText || "None provided"}`,
+      params.repoContext ? `Relevant repo snippets:\n${params.repoContext}` : "Relevant repo snippets: None provided",
+      [
+        "Return valid JSON with this exact shape:",
+        '{"analysisType":"user-story","status":"ready","summary":"","likelyCause":"","implementationApproach":"","suspectCommits":["sha-prefix"],"recommendations":["action"],"importantPoints":["point"],"impactedAreas":["area"],"dependencies":["dependency"]}',
+        "Rules:",
+        "- Keep summary to 2 sentences max.",
+        "- implementationApproach should be one short paragraph.",
+        "- impactedAreas must contain at most 4 specific code or domain areas.",
+        "- dependencies must contain at most 4 concrete dependencies or prerequisites.",
+        "- suspectCommits may contain at most 3 SHA prefixes if relevant recent commits look related.",
+        "- recommendations must contain at most 4 concrete implementation actions.",
+        "- importantPoints must contain at most 3 short bullets.",
+        "- Use an empty string for likelyCause unless a real risk is worth calling out.",
+      ].join("\n"),
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+  };
+}
+
+function normalizeAnalysisResult(parsed: Partial<AIAnalysisResult>, fallbackText: string, analysisType: WorkItemAnalysisType): AIAnalysisResult {
+  return {
+    analysisType: parsed.analysisType ?? analysisType,
+    status: parsed.status ?? "ready",
+    summary: parsed.summary ?? fallbackText,
+    likelyCause: parsed.likelyCause,
+    implementationApproach: parsed.implementationApproach,
+    suspectCommits: Array.isArray(parsed.suspectCommits) ? parsed.suspectCommits : [],
+    recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations : [],
+    importantPoints: Array.isArray(parsed.importantPoints) ? parsed.importantPoints : [],
+    impactedAreas: Array.isArray(parsed.impactedAreas) ? parsed.impactedAreas : [],
+    dependencies: Array.isArray(parsed.dependencies) ? parsed.dependencies : [],
+  } satisfies AIAnalysisResult;
+}
+
+export function hasEnoughDataForUserStoryAnalysis(params: {
+  ticketDescription?: string;
+  acceptanceCriteria?: string;
+}): boolean {
+  const combined = [params.ticketDescription, params.acceptanceCriteria]
+    .filter(Boolean)
+    .join(" ")
+    .replaceAll(/\s+/g, " ")
+    .trim();
+
+  if (!combined) {
+    return false;
+  }
+
+  return combined.length >= 80 || combined.split(" ").filter(Boolean).length >= 12;
+}
 
 export async function analyzeWithAI(
   params: AIAnalysisParams,
@@ -76,36 +269,28 @@ export async function analyzeWithAI(
     )
     .join("\n\n");
 
-  const bugDescription = compactText(params.bugDescription, MAX_BUG_FIELD_CHARS);
+  const ticketDescription = compactText(params.ticketDescription, MAX_BUG_FIELD_CHARS);
   const reproSteps = compactText(params.reproSteps, MAX_BUG_FIELD_CHARS);
+  const acceptanceCriteria = compactText(params.acceptanceCriteria, MAX_BUG_FIELD_CHARS);
   const repoContext = compactRepoContext(params.repoContext);
 
-  const systemPrompt = [
-    "You analyze production bugs using only the supplied bug details, recent commits, and repo snippets.",
-    "Return concise JSON only.",
-    "Prefer concrete evidence from the provided commits and snippets.",
-    "Do not speculate beyond the supplied context.",
-  ].join(" ");
-
-  const prompt = [
-    `Bug title: ${params.bugTitle}`,
-    bugDescription ? `Bug description: ${bugDescription}` : undefined,
-    reproSteps ? `Repro steps: ${reproSteps}` : undefined,
-    `Branch: ${params.repoBranch}`,
-    `Recent commits:\n${commitsText || "None provided"}`,
-    repoContext ? `Relevant repo snippets:\n${repoContext}` : "Relevant repo snippets: None provided",
-    [
-      "Return valid JSON with this exact shape:",
-      '{"summary":"","likelyCause":"","suspectCommits":["sha-prefix"],"recommendations":["action"],"importantPoints":["point"]}',
-      "Rules:",
-      "- Keep summary to 2 sentences max.",
-      "- suspectCommits must contain at most 3 SHA prefixes from the provided commit list.",
-      "- recommendations must contain at most 3 short, concrete actions.",
-      "- importantPoints must contain at most 3 short bullets.",
-    ].join("\n"),
-  ]
-    .filter(Boolean)
-    .join("\n\n");
+  const { systemPrompt, prompt } = params.analysisType === "bug"
+    ? buildBugPrompt({
+        ticketTitle: params.ticketTitle,
+        ticketDescription,
+        reproSteps,
+        repoBranch: params.repoBranch,
+        commitsText,
+        repoContext,
+      })
+    : buildUserStoryPrompt({
+        ticketTitle: params.ticketTitle,
+        ticketDescription,
+        acceptanceCriteria,
+        repoBranch: params.repoBranch,
+        commitsText,
+        repoContext,
+      });
 
   const anthropic = new Anthropic({ apiKey: params.anthropicKey });
   const messages: MessageParam[] = [
@@ -114,12 +299,13 @@ export async function analyzeWithAI(
       content: prompt,
     },
   ];
-  console.log("🚀 ~ analyzeWithAI ~ messages:", messages)
 
   const response = await anthropic.messages.create({
     model: params.anthropicModel,
     system: systemPrompt,
-    max_tokens: 900,
+    max_tokens: params.analysisType === "bug"
+      ? MAX_OUTPUT_TOKENS_BUG
+      : MAX_OUTPUT_TOKENS_USER_STORY,
     messages,
   });
 
@@ -128,15 +314,17 @@ export async function analyzeWithAI(
     throw new Error("Unexpected response type from AI");
   }
 
+  const responseText = stripCodeFences(content.text);
+
   try {
-    return JSON.parse(content.text) as AIAnalysisResult;
+    const parsed = JSON.parse(responseText) as Partial<AIAnalysisResult>;
+    return normalizeAnalysisResult(parsed, responseText, params.analysisType);
   } catch {
-    // Fallback if JSON parsing fails
-    return {
-      summary: content.text,
-      suspectCommits: [],
-      recommendations: [],
-      importantPoints: [],
-    };
+    const recovered = recoverAnalysisResultFromText(responseText, params.analysisType);
+    if (recovered) {
+      return normalizeAnalysisResult(recovered, responseText, params.analysisType);
+    }
+
+    return normalizeAnalysisResult({}, responseText, params.analysisType);
   }
 }
