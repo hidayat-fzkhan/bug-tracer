@@ -1,512 +1,440 @@
-# 🐛 BugTracer
+# BugTracer
 
-An intelligent bug triage tool that analyzes Azure DevOps bugs and identifies suspect commits in GitHub using heuristic ranking and AI analysis.
+BugTracer is an Azure DevOps and GitHub analysis tool that helps teams inspect newly logged Bugs, Defects, and User Stories with AI-assisted reasoning.
+
+The current product supports two main workflows:
+- Bugs page: fetches Azure DevOps work items of type `Bug` and `Defect`, then analyzes likely causes and related recent commits.
+- User Stories page: fetches Azure DevOps work items of type `User Story`, then analyzes likely implementation approach, impacted areas, and dependencies.
+
+## Current Highlights
+
+- Separate UI flows for Bugs and User Stories
+- Welcome page with direct navigation to each category
+- Route-based deep links:
+  - `/`
+  - `/bugs`
+  - `/bugs/analyze/:id`
+  - `/user-stories`
+  - `/user-stories/analyze/:id`
+- Azure DevOps filtering driven by config values in `backend/.env`
+- Anthropic-powered AI analysis using live GitHub repository context
+- Fast-first analysis flow with deep repository context only when needed
+- In-memory analysis caching keyed by ticket content, branch head, and model
+- Timing logs for commit fetch, repo-context fetch, model calls, and total analysis time
 
 ## Features
 
-✨ **Smart Bug Analysis**
-- Pulls bugs from Azure DevOps/TFS with WIQL filtering
-- Ranks recent GitHub commits by relevance to bug descriptions
-- Token-based similarity matching with bug ID detection
+### Azure DevOps Work Item Support
+- Fetches `Bug` and `Defect` items for the Bugs page
+- Fetches `User Story` items for the User Stories page
+- Uses WIQL filters based on the configured area path, states, days, and top count
 
-🤖 **AI-Powered Insights**
-- Uses Anthropic Claude with live GitHub branch context
-- Reads relevant repository code from GitHub to identify root causes
-- Provides actionable recommendations for fixing bugs
+### AI-Powered Analysis
+- Bug analysis focuses on likely cause, suspect commits, and next investigation steps
+- User Story analysis focuses on implementation approach, impacted areas, and dependencies
+- If a user story does not have enough description or acceptance-criteria data, the API returns `not-enough-data` instead of forcing an AI call
 
-🎨 **Intuitive Web UI**
-- Built with React + Material-UI
-- Search bugs by ID
-- Real-time loading with abort capability
-- View AI analysis and suspect commits in one place
+### Performance-Oriented Backend
+- Separate list endpoints and analysis endpoints
+- Two-stage analysis pipeline:
+  - fast pass without repo snippets
+  - deep pass with GitHub repo context only when the fast result is weak
+- Reduced GitHub repo-context scanning scope
+- Concurrency-limited GitHub blob fetching
+- In-memory cache for repeated ticket analysis
 
-⚡ **Developer Friendly**
-- Auto-reloading API server (`tsx watch`)
-- TypeScript throughout
-- Clean component architecture
-- Comprehensive configuration
+### Frontend UX
+- Welcome page with category navigation
+- Search by ticket ID within each category page
+- Independent loading and error states for list fetches and AI analysis
+- Deep-link support for ticket analysis pages
 
 ## Project Structure
 
-```
+```text
 bug-tracer/
-├── backend/              # Node.js + Express API server
-│   ├── src/
-│   │   ├── server.ts     # Express API server
-│   │   ├── ado.ts        # Azure DevOps integration
-│   │   ├── github.ts     # GitHub API client
-│   │   ├── ai.ts         # AI analysis (Anthropic Claude)
-│   │   └── config.ts     # Configuration loader
-│   └── package.json
-│
-├── frontend/             # Vite + React web UI
-│   ├── src/
-│   │   ├── components/   # React components
-│   │   ├── hooks/        # Custom React hooks
-│   │   ├── services/     # API services
-│   │   ├── utils/        # Utility functions
-│   │   └── App.tsx       # Root component
-│   └── package.json
-│   └── package.json
-│
+├── backend/
+│   ├── package.json
+│   └── src/
+│       ├── ado.ts          # Azure DevOps WIQL queries and work item mapping
+│       ├── ai.ts           # Anthropic prompt building and AI result normalization
+│       ├── config.ts       # Environment/config loader
+│       ├── github.ts       # GitHub commit fetching and repo-context extraction
+│       ├── http.ts         # Shared HTTP helpers
+│       ├── rank.ts         # Legacy heuristic ranking helper
+│       ├── server.ts       # Express API routes and analysis orchestration
+│       ├── text.ts         # Text cleanup and truncation helpers
+│       └── types.ts        # Backend domain types
+├── frontend/
+│   ├── ARCHITECTURE.md
+│   ├── package.json
+│   └── src/
+│       ├── App.tsx
+│       ├── main.tsx
+│       ├── styles.css
+│       ├── components/
+│       │   ├── bug/
+│       │   │   ├── AIAnalysis.tsx
+│       │   │   ├── BugCard.tsx
+│       │   │   ├── BugDetails.tsx
+│       │   │   └── BugList.tsx
+│       │   ├── common/
+│       │   │   ├── EmptyState.tsx
+│       │   │   └── ErrorMessage.tsx
+│       │   ├── layout/
+│       │   │   ├── Header.tsx
+│       │   │   └── Layout.tsx
+│       │   └── search/
+│       │       └── SearchBar.tsx
+│       ├── hooks/
+│       │   └── useBugs.ts  # Category-aware ticket loading hook
+│       ├── services/
+│       │   └── api.ts
+│       ├── types/
+│       │   └── index.ts
+│       └── utils/
+│           └── formatters.ts
 ├── .github/
 │   └── copilot-instructions.md
-│
-└── README.md             # This file
+├── CONTRIBUTING.md
+├── DEVELOPMENT.md
+└── README.md
+```
+
+## Architecture Chart
+
+```mermaid
+flowchart LR
+    UI[Browser UI] --> FE[React + Vite Frontend]
+    FE -->|List and analysis requests| API[Express Backend API]
+
+    API -->|WIQL + work item fetch| ADO[Azure DevOps / TFS]
+    API -->|Recent commits| GHCommits[GitHub Commits API]
+    API --> Cache[(In-memory Analysis Cache)]
+    API -->|Deep pass only when needed| GHContext[GitHub Tree and Blob APIs]
+    API --> AI[Anthropic Claude]
+
+    ADO --> API
+    GHCommits --> API
+    GHContext --> API
+    Cache --> API
+    AI --> API
+
+    FE -->|Routes| Routes[/, /bugs, /bugs/analyze/:id, /user-stories, /user-stories/analyze/:id]
+```
+
+## How It Works
+
+### 1. Ticket List Fetch
+
+The frontend loads one of two list endpoints:
+- `GET /api/bugs`
+- `GET /api/user-stories`
+
+Both endpoints use the same configured Azure DevOps filters from `backend/.env`:
+- `ADO_DAYS`
+- `ADO_TOP`
+- `ADO_STATES`
+- `ADO_AREA_PATH`
+
+Only the Azure DevOps work item type changes by category:
+- Bugs page: `Bug`, `Defect`
+- User Stories page: `User Story`
+
+### 2. Ticket Analysis Fetch
+
+When the user opens a ticket detail page, the frontend calls one of:
+- `GET /api/bugs/:ticketId/analysis`
+- `GET /api/user-stories/:ticketId/analysis`
+
+The backend then:
+1. Reads the current Azure DevOps work item
+2. Normalizes description, repro steps, and acceptance criteria
+3. Fetches recent commits from the configured GitHub branch
+4. Runs a fast AI pass without deep repo snippets
+5. Fetches GitHub repo context only if the fast result needs more signal
+6. Runs a deep AI pass only when necessary
+7. Caches the final result in memory
+
+### 3. Cache Behavior
+
+Analysis cache keys include:
+- work item category
+- ticket id
+- GitHub branch head SHA
+- selected Anthropic model
+- a fingerprint of the current work item content
+
+That means the cache invalidates naturally when:
+- the ticket description changes
+- acceptance criteria change
+- repro steps change
+- title or state changes
+- the branch head changes
+- the selected model changes
+
+## API Endpoints
+
+### Bugs
+
+```bash
+# List recent bugs and defects
+curl http://localhost:4000/api/bugs
+
+# Load a specific bug/defect by ID
+curl "http://localhost:4000/api/bugs?ticketId=12345"
+
+# Run AI analysis for a specific bug/defect
+curl http://localhost:4000/api/bugs/12345/analysis
+```
+
+### User Stories
+
+```bash
+# List recent user stories
+curl http://localhost:4000/api/user-stories
+
+# Load a specific user story by ID
+curl "http://localhost:4000/api/user-stories?ticketId=12345"
+
+# Run AI analysis for a specific user story
+curl http://localhost:4000/api/user-stories/12345/analysis
 ```
 
 ## Quick Start
 
 ### Prerequisites
-- Node.js 18+ and npm
-- Azure DevOps/TFS account and PAT token
+
+- Node.js 18+
+- npm
+- Azure DevOps / TFS PAT with Work Item read access
 - GitHub repository access
 - Anthropic API key
 
-### 1. Environment Setup
-
-Clone and navigate to the repo:
+### 1. Clone the Repository
 
 ```bash
 git clone <repo-url>
 cd bug-tracer
 ```
 
-Create `.env` files:
+### 2. Configure the Backend
 
 ```bash
-# Backend configuration
 cp backend/.env.example backend/.env
 ```
 
-Configure `backend/.env`:
+Example configuration:
 
 ```env
-# Azure DevOps
-ADO_ORG=your-org
-ADO_PROJECT=your-project
+# Azure DevOps (TFS)
+ADO_ORG=my-org
+ADO_PROJECT=my-project
 ADO_PAT=***
-ADO_AREA_PATH="Your\\Area\\Path"
 
 # GitHub
 GITHUB_REPO=https://github.com/owner/repo
 GITHUB_REPO_BRANCH=main
 GITHUB_TOKEN=ghp_***
 
+# Optional Azure filters
+ADO_DAYS=7
+ADO_TOP=10
+ADO_STATES=New,Active
+ADO_AREA_PATH=My Project\\Area\\Path
+GITHUB_COMMITS=50
+
+# API server
+API_PORT=4000
+
 # Anthropic AI
 ANTHROPIC_KEY=sk-ant-...
+ANTHROPIC_MODEL=claude-sonnet-4-6
 ```
 
-### 2. Install Dependencies
+### 3. Install Dependencies
 
 ```bash
-# Backend
 cd backend
 npm install
 
-# Frontend
-cd frontend
+cd ../frontend
 npm install
 ```
 
-### 3. Run Development Servers
+### 4. Start Development Servers
 
-**Terminal 1 - API Server** (with auto-reload):
+Backend:
+
 ```bash
 cd backend
 npm run dev
 ```
 
-**Terminal 2 - Frontend UI** (with auto-reload):
+Frontend:
+
 ```bash
 cd frontend
 npm run dev
 ```
 
-Open http://localhost:5173 in your browser! 🚀
+Open `http://localhost:5173`.
 
-## Usage
+## Frontend Routes
 
-### Web UI
-1. Open http://localhost:5173
-2. Search for a bug by ID (e.g., 2689652)
-3. Click Search to fetch bug details and AI analysis
-4. Click the STOP button to abort ongoing requests
-
-### API Server
-The backend API runs on `http://localhost:4000`:
-
-```bash
-# Get recent bugs
-curl http://localhost:4000/api/bugs
-
-# Get specific bug with AI analysis
-curl http://localhost:4000/api/bugs?bugId=12345
-```
+- `/` - welcome page
+- `/bugs` - list of Bugs and Defects
+- `/bugs/analyze/:id` - bug analysis page
+- `/user-stories` - list of User Stories
+- `/user-stories/analyze/:id` - user story analysis page
 
 ## Configuration
 
 ### Required Environment Variables
 
 | Variable | Description |
-|----------|-------------|
-| `ADO_ORG` | Azure DevOps organization (e.g., `myorg` for `dev.azure.com/myorg`) |
+| --- | --- |
+| `ADO_ORG` | Azure DevOps organization or full base URL |
 | `ADO_PROJECT` | Azure DevOps project name |
-| `ADO_PAT` | PAT token with Work Items read access |
-| `GITHUB_REPO` | GitHub repository URL or `owner/repo` |
-| `GITHUB_REPO_BRANCH` | Branch to read live code from |
-| `ANTHROPIC_KEY` | Anthropic Claude API key |
+| `ADO_PAT` | Azure DevOps PAT token |
+| `GITHUB_REPO` | GitHub repo as `owner/repo` or full URL |
+| `GITHUB_REPO_BRANCH` | Branch used for commit and repo-context reads |
+| `ANTHROPIC_KEY` | Anthropic API key |
 
 ### Optional Environment Variables
 
 | Variable | Default | Description |
-|----------|---------|-------------|
-| `ADO_DAYS` | 7 | How many days back to look for bugs |
-| `ADO_TOP` | 10 | Number of bugs to fetch |
-| `ADO_STATES` | `New,Active` | Bug states to fetch |
-| `ADO_AREA_PATH` | - | Filter bugs by area path |
-| `GITHUB_TOKEN` | - | Optional GitHub token for private repos or higher rate limits |
-| `GITHUB_COMMITS` | 50 | Number of recent commits to pass into AI alongside repo code context |
-| `API_PORT` | 4000 | Port for API server |
+| --- | --- | --- |
+| `ADO_DAYS` | `7` | Number of days of Azure DevOps tickets to query |
+| `ADO_TOP` | `10` | Maximum number of list results |
+| `ADO_STATES` | `New,Active` | Azure DevOps states to include |
+| `ADO_AREA_PATH` | unset | Optional Azure area-path filter |
+| `GITHUB_TOKEN` | unset | Recommended for private repos and higher GitHub API limits |
+| `GITHUB_COMMITS` | `50` | Max recent commits to inspect before analysis narrowing |
+| `API_PORT` | `4000` | Backend port |
+| `ANTHROPIC_MODEL` | `claude-sonnet-4-6` | Default model for interactive analysis |
 
-## AI Analysis
+## AI Analysis Design
 
-BugTracer uses Anthropic Claude for AI-driven investigation.
+### Bug Analysis Output
 
-Configure `.env`:
+Bug analysis emphasizes:
+- why the bug is happening
+- likely issue or root cause
+- related recent commits
+- next investigation or fix steps
 
-```env
-ANTHROPIC_KEY=sk-ant-...
-ANTHROPIC_MODEL=claude-3-7-sonnet-latest
-GITHUB_REPO=https://github.com/owner/repo
-GITHUB_REPO_BRANCH=main
-```
+### User Story Analysis Output
 
-How AI gets code access:
-- The backend reads the live GitHub repository tree from `GITHUB_REPO`
-- It fetches relevant files from `GITHUB_REPO_BRANCH`
-- It extracts bounded code snippets related to the bug text
-- Those snippets are sent to Anthropic together with bug details and recent commits
+User story analysis emphasizes:
+- what the story is asking for
+- suggested implementation approach
+- likely impacted areas
+- dependencies or preconditions
+- implementation recommendations
 
-## Development
+### Sparse User Story Handling
 
-### Backend Development
+If a user story does not contain enough useful description or acceptance criteria, the backend returns:
 
-Auto-reload API server on file changes:
-```bash
-cd backend
-npm run dev
-```
-
-TypeScript compilation:
-```bash
-npm run build
-```
-
-### Frontend Development
-
-Auto-reload UI on file changes:
-```bash
-cd frontend
-npm run dev
-```
-
-See [frontend/ARCHITECTURE.md](frontend/ARCHITECTURE.md) for component structure details.
-
-## How It Works
-
-### Data Flow Overview
-
-BugTracer connects to both Azure DevOps and GitHub to correlate bugs with code changes:
-
-```
-┌─────────────────┐         ┌──────────────────┐
-│ Azure DevOps    │         │    GitHub        │
-│   Work Items    │         │   Commits API    │
-└────────┬────────┘         └────────┬─────────┘
-         │                           │
-         │ WIQL Query                │ REST API
-         │                           │
-         ▼                           ▼
-    ┌────────────────────────────────────┐
-    │       BugTracer Backend API        │
-    │                                    │
-    │  1. Fetch Bugs                     │
-    │  2. Fetch Commits                  │
-    │  3. AI Analysis (Anthropic)        │
-    └──────────────┬─────────────────────┘
-                   │
-                   │ JSON API
-                   ▼
-         ┌─────────────────┐
-         │  React Web UI   │
-         │  (localhost:5173)│
-         └─────────────────┘
-```
-
-### Step-by-Step Process
-
-#### 1. **Fetching Bugs from Azure DevOps**
-
-**What happens:**
-- Backend uses Azure DevOps REST API with Basic authentication (PAT token)
-- Constructs a WIQL (Work Item Query Language) query
-- Filters by: State, Area Path, Creation Date
-
-**Example WIQL Query:**
-```sql
-SELECT [System.Id], [System.Title], [System.State]
-FROM WorkItems
-WHERE [System.WorkItemType] = 'Bug'
-  AND [System.AreaPath] UNDER 'YourProject\\Area'
-  AND [System.CreatedDate] > @Today - 30
-ORDER BY [System.CreatedDate] DESC
-```
-
-**API Call:**
-```typescript
-// backend/src/ado.ts
-POST https://dev.azure.com/{organization}/{project}/_apis/wit/wiql?api-version=7.0
-Authorization: Basic {base64(username:PAT)}
-
-// Returns bug IDs, then fetch full details:
-GET https://dev.azure.com/{organization}/{project}/_apis/wit/workitems/{id}
-```
-
-**Retrieved Data:**
-- Bug ID (e.g., 2689652)
-- Title, Description, Repro Steps
-- State (New, Active, Resolved)
-- Assigned To, Area Path, Tags
-- Created Date, Web URL
-
-#### 2. **Fetching Commits from GitHub**
-
-**What happens:**
-- Backend uses GitHub REST API via Octokit client
-- Fetches recent commits from the configured branch
-- Includes file changes for each commit
-
-**API Call:**
-```typescript
-// backend/src/github.ts
-GET https://api.github.com/repos/{owner}/{repo}/commits
-Authorization: Bearer {GITHUB_TOKEN}
-?per_page=50&sha=main
-
-// For each commit, fetch files:
-GET https://api.github.com/repos/{owner}/{repo}/commits/{sha}
-```
-
-**Retrieved Data:**
-- Commit SHA (e.g., a1b2c3d4)
-- Commit message
-- Author name and date
-- List of changed files with paths
-- GitHub web URL
-
-#### 3. **AI Analysis Process**
-
-**When triggered:** User searches for a specific bug ID in the UI
-
-**What happens:**
-
-```typescript
-// 1. Send context to Anthropic Claude
-const aiInput = {
-  bugTitle: "Application crashes on login",
-  bugDescription: "Steps to reproduce: 1. Open app 2. Enter credentials...",
-  reproSteps: "User reports crash when...",
-  repoBranch: "main",
-  repoContext: "File: src/auth/login.ts\n...",
-  recentCommits: [
-    {
-      sha: "a1b2c3d4",
-      message: "Fix auth validation",
-      files: ["src/auth/login.ts", "src/utils/validator.ts"]
-    },
-    // ... last 30 commits
-  ]
-}
-
-// 2. AI analyzes and returns structured response
-const aiResponse = {
-  summary: "The bug is caused by null pointer in authentication...",
-  likelyCause: "Missing validation in login.ts line 42",
-  suspectCommits: ["a1b2c3d4", "e5f6g7h8"],  // SHAs of likely culprits
-  recommendations: [
-    "Add null check in validateCredentials()",
-    "Update unit tests for edge cases"
-  ]
-}
-```
-
-Anthropic reviews:
-- The Azure DevOps bug title, description, and repro steps
-- Recent GitHub commits from the configured branch
-- Relevant code snippets fetched live from the repository branch
-
-#### 4. **Data Enrichment & Response**
-
-**Backend enriches AI commits with GitHub URLs:**
-```typescript
-// Match AI-returned SHA prefixes to full commit objects
-const enrichedCommits = aiResult.suspectCommits.map(shaPrefix => {
-  const commit = commits.find(c => c.sha.startsWith(shaPrefix));
-  return {
-    sha: shaPrefix,
-    url: commit?.htmlUrl  // https://github.com/owner/repo/commit/{sha}
-  }
-});
-```
-
-**API Response to Frontend:**
 ```json
 {
-  "generatedAt": "2026-02-12T10:30:00Z",
-  "bugs": [
-    {
-      "id": 2689652,
-      "title": "Application crashes on login",
-      "state": "Active",
-      "webUrl": "https://dev.azure.com/org/project/_workitems/edit/2689652",
-      "summary": "User reports crash when entering invalid credentials...",
-      "aiAnalysis": {
-        "summary": "Null pointer exception in auth validation",
-        "likelyCause": "Missing null check in login.ts",
-        "suspectCommits": [
-          {
-            "sha": "a1b2c3d4",
-            "url": "https://github.com/owner/repo/commit/a1b2c3d4..."
-          }
-        ],
-        "recommendations": ["Add null check", "Update tests"]
-      }
-    }
-  ]
+  "analysisType": "user-story",
+  "status": "not-enough-data",
+  "summary": "Not enough data for AI analysis."
 }
 ```
-
-### Authentication & Tokens
-
-**Azure DevOps PAT (Personal Access Token):**
-- Created in: Azure DevOps → User Settings → Personal Access Tokens
-- Permissions needed: **Work Items (Read)**
-- Used as: `Authorization: Basic {base64(":PAT")}`
-
-**GitHub PAT (Personal Access Token):**
-- Created in: GitHub → Settings → Developer Settings → Personal Access Tokens
-- Permissions needed: **repo (read)** for private repositories
-- Optional for public repositories, but recommended to avoid low rate limits
-- Used as: `Authorization: Bearer {TOKEN}`
-
-**Anthropic API Key:**
-- Created in: Anthropic Console
-- Used to call Claude for bug analysis
-- Stored in: `ANTHROPIC_KEY`
-
-### Configuration Flow
-
-```
-.env file
-    ↓
-config.ts (loadConfig)
-    ↓
-├── ado.ts (fetchBugs)
-├── github.ts (fetchCommits)
-└── ai.ts (analyzeWithAI)
-    ↓
-server.ts (Express API)
-    ↓
-Frontend (React UI)
-```
-
-### Rate Limits & Performance
-
-**Azure DevOps:**
-- Standard: No published rate limits for authenticated requests
-- Typical response: 200-500ms per request
-
-**GitHub API:**
-- Authenticated: 5,000 requests/hour
-- Fetching commits and repository snippets increases API usage
-- Typical response: 100-300ms per request
-
-**AI Analysis:**
-- Claude API: 3-8 seconds depending on prompt size
-- Only runs for single-bug queries to avoid slowdowns
-
-### Ranking Algorithm
-
-```typescript
-score = tokenOverlap + bugIdBoost + filenameScore - mergePenalty
-```
-
-- Token overlap: Similarity between bug text and commit message
-- Bug ID boost: +0.6 if commit message references the bug number
-- Filename score: +0.08 for each matching file
-- Merge penalty: 0.6x multiplier for merge commits
-
-## Architecture
-
-### Backend Stack
-- **Runtime**: Node.js with TypeScript
-- **Framework**: Express.js
-- **APIs**: Azure DevOps REST, GitHub REST via Octokit
-- **AI**: Anthropic Claude SDK
-- **Type Safety**: TypeScript with strict mode
-
-### Frontend Stack
-- **Framework**: React 18.3
-- **Build Tool**: Vite
-- **UI**: Material-UI (MUI)
-- **HTTP**: Fetch API with AbortController
-- **Architecture**: Component-based with custom hooks
-
-See [frontend/ARCHITECTURE.md](frontend/ARCHITECTURE.md) for fine-grained details.
-
-## Troubleshooting
-
-### API server not reloading on changes
-Make sure you're using `npm run dev` (not `npm start`). The `tsx watch` command provides hot-reload.
-
-### "Request cancelled" error
-This is normal - it means you clicked the STOP button. Just search again.
-
-### AI analysis not running
-Check that:
-1. `ANTHROPIC_KEY` is set in `.env`
-2. `GITHUB_REPO` and `GITHUB_REPO_BRANCH` are set correctly
-3. API logs show the `[AI][github-context]` line
-
-### Empty bugs list
-1. Verify Azure DevOps credentials and bug visibility
-2. Check that `ADO_AREA_PATH` (if set) is correct
-3. Increase `ADO_DAYS` to look further back
 
 ## Performance Notes
 
-- **Commits analyzed**: Default 50, configurable via `GITHUB_COMMITS`
-- **AI analysis timeout**: Runs only for single-bug queries to avoid slowdowns
-- **Ranking**: Usually instant (< 100ms)
-- **UI responsiveness**: Use STOP button to cancel long-running requests
+The current backend includes several latency optimizations:
 
-## Contributing
+- `claude-sonnet-4-6` as the default interactive model
+- reduced repo-context candidate file count
+- concurrency-limited GitHub blob fetches
+- fast-pass analysis before deep repo-context collection
+- in-memory result caching
+- stage timing logs for easier profiling
 
-This is a personal side project. Feel free to fork and customize!
+Useful backend log lines:
+- `[AI][cache]`
+- `[AI][commits]`
+- `[AI][model-fast]`
+- `[AI][github-context]`
+- `[AI][model-deep]`
+- `[AI][analysis]`
 
-Suggestions for improvement:
-- Add support for more issue trackers (Jira, Linear, etc.)
-- Implement ranking refinement UI
-- Add bug assignment workflows
-- Export reports as PDF
+## Development Commands
 
-## License
+Backend:
 
-Personal project - adjust as needed.
+```bash
+cd backend
+npm run dev
+npm run build
+npm start
+```
+
+Frontend:
+
+```bash
+cd frontend
+npm run dev
+npm run build
+npm run preview
+```
+
+## Troubleshooting
+
+### AI analysis is slow
+
+Check the backend logs for:
+- cache hit or miss
+- commit fetch time
+- repo-context fetch time
+- fast-pass model time
+- deep-pass model time
+
+If deep repo context is running for most tickets, refine ticket descriptions and acceptance criteria so the fast pass has better signal.
+
+### GitHub API issues
+
+If the repo is private or protected by SSO/SAML, make sure `GITHUB_TOKEN` has valid access to the target repo.
+
+### Azure DevOps list is empty
+
+Check:
+- PAT validity
+- `ADO_AREA_PATH`
+- `ADO_STATES`
+- `ADO_DAYS`
+
+### User story returns `not-enough-data`
+
+That means the work item did not contain enough description or acceptance-criteria content for useful analysis. Update the Azure DevOps ticket and rerun analysis.
+
+## Additional Docs
+
+- [DEVELOPMENT.md](DEVELOPMENT.md)
+- [CONTRIBUTING.md](CONTRIBUTING.md)
+- [frontend/ARCHITECTURE.md](frontend/ARCHITECTURE.md)
+
+## Tech Stack
+
+Backend:
+- Node.js
+- TypeScript
+- Express
+- Octokit
+- Anthropic SDK
+
+Frontend:
+- React 18
+- Vite
+- Material UI
 
 ## Resources
 
 - [Azure DevOps REST API](https://learn.microsoft.com/en-us/rest/api/azure/devops)
 - [GitHub REST API](https://docs.github.com/en/rest)
-- [Claude API](https://anthropic.com/docs)
+- [Anthropic API Docs](https://docs.anthropic.com/)
