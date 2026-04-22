@@ -78,12 +78,15 @@ export default function App() {
     error,
     analysisLoading,
     analysisError,
+    promptLoading,
+    promptError,
     tickets,
     selectedTicketId,
     generatedAt,
     load,
     reset,
     handleStop,
+    loadImplementationPrompt,
   } = useTickets(currentCategory);
 
   const categoryMeta = currentCategory ? getCategoryMeta(currentCategory) : null;
@@ -240,6 +243,9 @@ export default function App() {
                 selectedBugId={selectedTicket?.id}
                 analysisLoading={analysisLoading}
                 analysisError={analysisError}
+                promptLoading={promptLoading}
+                promptError={promptError}
+                onGeneratePrompt={loadImplementationPrompt}
               />
             )}
           </>

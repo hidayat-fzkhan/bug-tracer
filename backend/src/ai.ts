@@ -9,6 +9,7 @@ const MAX_FILES_PER_COMMIT = 3;
 const MAX_COMMIT_MESSAGE_CHARS = 140;
 const MAX_OUTPUT_TOKENS_BUG = 900;
 const MAX_OUTPUT_TOKENS_USER_STORY = 1400;
+const MAX_OUTPUT_TOKENS_IMPL_PROMPT = 1800;
 
 function truncate(input: string, maxChars: number): string {
   if (input.length <= maxChars) {
@@ -239,6 +240,89 @@ function normalizeAnalysisResult(parsed: Partial<AIAnalysisResult>, fallbackText
     impactedAreas: Array.isArray(parsed.impactedAreas) ? parsed.impactedAreas : [],
     dependencies: Array.isArray(parsed.dependencies) ? parsed.dependencies : [],
   } satisfies AIAnalysisResult;
+}
+
+export type ImplementationPromptParams = {
+  ticketTitle: string;
+  ticketDescription?: string;
+  acceptanceCriteria?: string;
+  repoContext?: string;
+  cachedAnalysis?: {
+    implementationApproach?: string;
+    recommendations?: string[];
+    impactedAreas?: string[];
+    dependencies?: string[];
+  };
+  repoBranch: string;
+  anthropicKey: string;
+  anthropicModel: string;
+};
+
+export async function generateImplementationPrompt(
+  params: ImplementationPromptParams,
+): Promise<string> {
+  const ticketDescription = compactText(params.ticketDescription, MAX_BUG_FIELD_CHARS);
+  const acceptanceCriteria = compactText(params.acceptanceCriteria, MAX_BUG_FIELD_CHARS);
+  const repoContext = compactRepoContext(params.repoContext);
+
+  const systemPrompt = [
+    "You are a senior software engineer writing a ready-to-use implementation prompt for an AI coding assistant.",
+    "The developer will paste your output directly into their coding tool (Claude Code, GitHub Copilot, Cursor, etc.).",
+    "Output only the prompt text — no preamble, no explanation, no meta-commentary like 'Here is your prompt:'.",
+    "The prompt must be self-contained, specific, and immediately actionable.",
+  ].join(" ");
+
+  const analysisContext = params.cachedAnalysis
+    ? [
+        params.cachedAnalysis.implementationApproach
+          ? `AI analysis — implementation approach: ${params.cachedAnalysis.implementationApproach}`
+          : undefined,
+        params.cachedAnalysis.impactedAreas?.length
+          ? `AI analysis — impacted areas: ${params.cachedAnalysis.impactedAreas.join(", ")}`
+          : undefined,
+        params.cachedAnalysis.dependencies?.length
+          ? `AI analysis — dependencies: ${params.cachedAnalysis.dependencies.join(", ")}`
+          : undefined,
+        params.cachedAnalysis.recommendations?.length
+          ? `AI analysis — recommendations:\n${params.cachedAnalysis.recommendations.map((r) => `- ${r}`).join("\n")}`
+          : undefined,
+      ].filter(Boolean).join("\n")
+    : undefined;
+
+  const userMessage = [
+    `User story title: ${params.ticketTitle}`,
+    ticketDescription ? `User story description: ${ticketDescription}` : undefined,
+    acceptanceCriteria ? `Acceptance criteria: ${acceptanceCriteria}` : undefined,
+    `Target branch: ${params.repoBranch}`,
+    analysisContext ? `Prior AI analysis (use as additional context):\n${analysisContext}` : undefined,
+    repoContext ? `Relevant codebase context:\n${repoContext}` : undefined,
+    [
+      "Generate a complete implementation prompt that a developer can paste directly into an AI coding assistant.",
+      "The prompt must include:",
+      "- A clear, one-sentence task description",
+      "- Which files or modules to create or modify (reference the codebase context if provided)",
+      "- Any constraints, edge cases, or non-functional requirements derived from the story",
+      "- All acceptance criteria that the implementation must satisfy",
+      "- The target branch name for the implementation",
+    ].join("\n"),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  const anthropic = new Anthropic({ apiKey: params.anthropicKey });
+  const response = await anthropic.messages.create({
+    model: params.anthropicModel,
+    system: systemPrompt,
+    max_tokens: MAX_OUTPUT_TOKENS_IMPL_PROMPT,
+    messages: [{ role: "user", content: userMessage }],
+  });
+
+  const content = response.content[0];
+  if (content.type !== "text") {
+    throw new Error("Unexpected response type from AI");
+  }
+
+  return content.text.trim();
 }
 
 export function hasEnoughDataForUserStoryAnalysis(params: {

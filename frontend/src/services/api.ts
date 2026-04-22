@@ -1,4 +1,4 @@
-import type { ApiTicketAnalysisResponse, ApiTicketListResponse, TicketCategory } from "../types";
+import type { ApiImplementationPromptResponse, ApiTicketAnalysisResponse, ApiTicketListResponse, TicketCategory } from "../types";
 
 function getApiBase(): string {
   return import.meta.env.VITE_API_BASE || "";
@@ -35,4 +35,18 @@ export async function fetchTicketAnalysis(
     throw new Error(text || `Request failed: ${res.status}`);
   }
   return (await res.json()) as ApiTicketAnalysisResponse;
+}
+
+export async function fetchImplementationPrompt(
+  ticketId: number,
+  signal?: AbortSignal,
+): Promise<ApiImplementationPromptResponse> {
+  const base = getApiBase();
+  const url = `${base}/api/user-stories/${ticketId}/implementation-prompt`;
+  const res = await fetch(url, { signal });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || `Request failed: ${res.status}`);
+  }
+  return (await res.json()) as ApiImplementationPromptResponse;
 }

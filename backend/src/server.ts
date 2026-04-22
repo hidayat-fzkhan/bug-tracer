@@ -1,7 +1,7 @@
 import cors from "cors";
 import express from "express";
 import { fetchNewWorkItems, fetchWorkItemById } from "./ado.js";
-import { analyzeWithAI, hasEnoughDataForUserStoryAnalysis, type AIAnalysisResult } from "./ai.js";
+import { analyzeWithAI, generateImplementationPrompt, hasEnoughDataForUserStoryAnalysis, type AIAnalysisResult } from "./ai.js";
 import { loadConfig } from "./config.js";
 import { fetchGitHubRepoContext, fetchRecentCommits } from "./github.js";
 import { stripHtmlToText, truncate } from "./text.js";
@@ -25,6 +25,32 @@ type CachedAnalysisEntry = {
 };
 
 const analysisCache = new Map<string, CachedAnalysisEntry>();
+
+type CachedPromptEntry = {
+  expiresAt: number;
+  value: string;
+};
+
+const implementationPromptCache = new Map<string, CachedPromptEntry>();
+
+function getCachedPrompt(cacheKey: string): string | undefined {
+  const cached = implementationPromptCache.get(cacheKey);
+  if (!cached) {
+    return undefined;
+  }
+  if (cached.expiresAt <= Date.now()) {
+    implementationPromptCache.delete(cacheKey);
+    return undefined;
+  }
+  return cached.value;
+}
+
+function setCachedPrompt(cacheKey: string, value: string) {
+  implementationPromptCache.set(cacheKey, {
+    expiresAt: Date.now() + ANALYSIS_CACHE_TTL_MS,
+    value,
+  });
+}
 
 function elapsedMs(startTime: number): number {
   return Math.round(performance.now() - startTime);
@@ -422,6 +448,95 @@ registerCategoryRoutes({
   route: "user-stories",
   category: "user-stories",
   listKey: "userStories",
+});
+
+app.get("/api/user-stories/:ticketId/implementation-prompt", async (req, res) => {
+  try {
+    const requestStart = performance.now();
+    const cfg = loadConfig();
+    const ticketId = Number(req.params.ticketId);
+
+    if (!Number.isFinite(ticketId)) {
+      res.status(400).json({ error: "Invalid user story id" });
+      return;
+    }
+
+    const workItem = await fetchWorkItemById({
+      adoOrg: cfg.adoOrg,
+      project: cfg.adoProject,
+      pat: cfg.adoPat,
+      id: ticketId,
+      category: "user-stories",
+    });
+
+    if (!workItem) {
+      res.status(404).json({ error: `User story ${ticketId} not found` });
+      return;
+    }
+
+    const description = workItem.description ? stripHtmlToText(workItem.description) : undefined;
+    const acceptanceCriteria = workItem.acceptanceCriteria
+      ? stripHtmlToText(workItem.acceptanceCriteria)
+      : undefined;
+
+    const commits = await fetchRecentCommits({
+      repo: cfg.githubRepo,
+      token: cfg.githubToken,
+      branch: cfg.githubRepoBranch,
+      count: Math.min(cfg.githubCommits, 8),
+    });
+
+    const branchHeadSha = commits[0]?.sha ?? cfg.githubRepoBranch;
+    const analysisCacheKey = buildCacheKey({ workItem, branchHeadSha, model: cfg.anthropicModel });
+    const promptCacheKey = `impl_prompt::${analysisCacheKey}`;
+    const cached = getCachedPrompt(promptCacheKey);
+
+    if (cached) {
+      console.log(`[AI][impl-prompt][cache] ticketId=${ticketId} hit=true`);
+      res.json({ generatedAt: new Date().toISOString(), ticketId, implementationPrompt: cached });
+      return;
+    }
+
+    const cachedAnalysis = getCachedAnalysis(analysisCacheKey);
+    let repoContext: string | null | undefined = null;
+
+    if (cachedAnalysis) {
+      console.log(`[AI][impl-prompt] ticketId=${ticketId} reusing cached analysis, skipping GitHub context fetch`);
+    } else {
+      const workItemContextText = [workItem.title, description, acceptanceCriteria]
+        .filter(Boolean)
+        .join("\n\n");
+      repoContext = await fetchGitHubRepoContext({
+        repo: cfg.githubRepo,
+        token: cfg.githubToken,
+        branch: cfg.githubRepoBranch,
+        bugText: workItemContextText,
+        maxFiles: 4,
+        maxChars: 6000,
+      });
+    }
+
+    const implementationPrompt = await generateImplementationPrompt({
+      ticketTitle: workItem.title,
+      ticketDescription: description,
+      acceptanceCriteria,
+      repoContext: repoContext ?? undefined,
+      cachedAnalysis: cachedAnalysis ?? undefined,
+      repoBranch: cfg.githubRepoBranch,
+      anthropicKey: cfg.anthropicKey,
+      anthropicModel: cfg.anthropicModel,
+    });
+
+    setCachedPrompt(promptCacheKey, implementationPrompt);
+    console.log(
+      `[AI][impl-prompt] ticketId=${ticketId} model=${cfg.anthropicModel} elapsedMs=${elapsedMs(requestStart)}`,
+    );
+
+    res.json({ generatedAt: new Date().toISOString(), ticketId, implementationPrompt });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
 });
 
 app.listen(port, () => {

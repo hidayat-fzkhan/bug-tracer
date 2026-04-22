@@ -8,6 +8,9 @@ type BugListProps = Readonly<{
   selectedBugId?: number;
   analysisLoading?: boolean;
   analysisError?: string | null;
+  promptLoading?: boolean;
+  promptError?: string | null;
+  onGeneratePrompt?: (ticketId: number) => void;
 }>;
 
 export function BugList({
@@ -16,6 +19,9 @@ export function BugList({
   selectedBugId,
   analysisLoading,
   analysisError,
+  promptLoading,
+  promptError,
+  onGeneratePrompt,
 }: BugListProps) {
   return (
     <Stack spacing={3}>
@@ -33,6 +39,9 @@ export function BugList({
           analysisError={
             selectedBugId === bug.id && bugs.length === 1 ? analysisError : null
           }
+          promptLoading={selectedBugId === bug.id && bugs.length === 1 ? promptLoading : false}
+          promptError={selectedBugId === bug.id && bugs.length === 1 ? promptError : null}
+          onGeneratePrompt={onGeneratePrompt}
         />
       ))}
     </Stack>

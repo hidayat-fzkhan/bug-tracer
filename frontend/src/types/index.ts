@@ -33,6 +33,13 @@ export type ApiTicket = {
   reproSteps?: string;
   acceptanceCriteria?: string;
   aiAnalysis?: ApiTicketAnalysis;
+  implementationPrompt?: string;
+};
+
+export type ApiImplementationPromptResponse = {
+  generatedAt: string;
+  ticketId: number;
+  implementationPrompt: string;
 };
 
 export type ApiTicketListResponse = {

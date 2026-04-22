@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { fetchTicketAnalysis, fetchTickets } from "../services/api";
+import { fetchImplementationPrompt, fetchTicketAnalysis, fetchTickets } from "../services/api";
 import type { ApiTicket, TicketCategory } from "../types";
 
 export function useTickets(category: TicketCategory | null) {
@@ -8,11 +8,14 @@ export function useTickets(category: TicketCategory | null) {
   const [error, setError] = useState<string | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [promptLoading, setPromptLoading] = useState(false);
+  const [promptError, setPromptError] = useState<string | null>(null);
   const [tickets, setTickets] = useState<ApiTicket[]>([]);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const analysisAbortControllerRef = useRef<AbortController | null>(null);
+  const promptAbortControllerRef = useRef<AbortController | null>(null);
 
   const loadAnalysis = useCallback(async (ticketId: number) => {
     if (!category) {
@@ -54,6 +57,39 @@ export function useTickets(category: TicketCategory | null) {
     }
   }, [category]);
 
+  const loadImplementationPrompt = useCallback(async (ticketId: number) => {
+    if (promptAbortControllerRef.current) {
+      promptAbortControllerRef.current.abort();
+    }
+
+    const controller = new AbortController();
+    promptAbortControllerRef.current = controller;
+    setPromptLoading(true);
+    setPromptError(null);
+
+    try {
+      const data = await fetchImplementationPrompt(ticketId, controller.signal);
+      setTickets((currentTickets) =>
+        currentTickets.map((ticket) =>
+          ticket.id === data.ticketId
+            ? { ...ticket, implementationPrompt: data.implementationPrompt }
+            : ticket,
+        ),
+      );
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        setPromptError("Prompt generation cancelled");
+      } else {
+        setPromptError(err instanceof Error ? err.message : "Unknown error generating prompt");
+      }
+    } finally {
+      setPromptLoading(false);
+      if (promptAbortControllerRef.current === controller) {
+        promptAbortControllerRef.current = null;
+      }
+    }
+  }, []);
+
   const reset = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -61,11 +97,16 @@ export function useTickets(category: TicketCategory | null) {
     if (analysisAbortControllerRef.current) {
       analysisAbortControllerRef.current.abort();
     }
+    if (promptAbortControllerRef.current) {
+      promptAbortControllerRef.current.abort();
+    }
 
     setLoading(false);
     setError(null);
     setAnalysisLoading(false);
     setAnalysisError(null);
+    setPromptLoading(false);
+    setPromptError(null);
     setTickets([]);
     setGeneratedAt(null);
     setSelectedTicketId(null);
@@ -120,6 +161,9 @@ export function useTickets(category: TicketCategory | null) {
     if (analysisAbortControllerRef.current) {
       analysisAbortControllerRef.current.abort();
     }
+    if (promptAbortControllerRef.current) {
+      promptAbortControllerRef.current.abort();
+    }
   };
 
   return {
@@ -129,11 +173,14 @@ export function useTickets(category: TicketCategory | null) {
     error,
     analysisLoading,
     analysisError,
+    promptLoading,
+    promptError,
     tickets,
     selectedTicketId,
     generatedAt,
     load,
     reset,
     handleStop,
+    loadImplementationPrompt,
   };
 }
