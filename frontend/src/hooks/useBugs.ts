@@ -1,5 +1,9 @@
 import { useCallback, useRef, useState } from "react";
-import { fetchImplementationPrompt, fetchTicketAnalysis, fetchTickets } from "../services/api";
+import {
+  fetchImplementationPrompt,
+  fetchTicketAnalysis,
+  fetchTickets,
+} from "../services/api";
 import type { ApiTicket, TicketCategory } from "../types";
 
 export function useTickets(category: TicketCategory | null) {
@@ -17,78 +21,98 @@ export function useTickets(category: TicketCategory | null) {
   const analysisAbortControllerRef = useRef<AbortController | null>(null);
   const promptAbortControllerRef = useRef<AbortController | null>(null);
 
-  const loadAnalysis = useCallback(async (ticketId: number) => {
-    if (!category) {
-      return;
-    }
-
-    if (analysisAbortControllerRef.current) {
-      analysisAbortControllerRef.current.abort();
-    }
-
-    const controller = new AbortController();
-    analysisAbortControllerRef.current = controller;
-    setAnalysisLoading(true);
-    setAnalysisError(null);
-
-    try {
-      const data = await fetchTicketAnalysis(category, ticketId, controller.signal);
-      setTickets((currentTickets) =>
-        currentTickets.map((ticket) =>
-          ticket.id === data.ticketId
-            ? {
-                ...ticket,
-                aiAnalysis: data.aiAnalysis,
-              }
-            : ticket,
-        ),
-      );
-    } catch (err) {
-      if (err instanceof Error && err.name === "AbortError") {
-        setAnalysisError("AI analysis cancelled");
-      } else {
-        setAnalysisError(err instanceof Error ? err.message : "Unknown AI analysis error");
+  const loadAnalysis = useCallback(
+    async (ticketId: number) => {
+      if (!category) {
+        return;
       }
-    } finally {
-      setAnalysisLoading(false);
-      if (analysisAbortControllerRef.current === controller) {
-        analysisAbortControllerRef.current = null;
-      }
-    }
-  }, [category]);
 
-  const loadImplementationPrompt = useCallback(async (ticketId: number) => {
-    if (promptAbortControllerRef.current) {
-      promptAbortControllerRef.current.abort();
-    }
-
-    const controller = new AbortController();
-    promptAbortControllerRef.current = controller;
-    setPromptLoading(true);
-    setPromptError(null);
-
-    try {
-      const data = await fetchImplementationPrompt(ticketId, controller.signal);
-      setTickets((currentTickets) =>
-        currentTickets.map((ticket) =>
-          ticket.id === data.ticketId
-            ? { ...ticket, implementationPrompt: data.implementationPrompt }
-            : ticket,
-        ),
-      );
-    } catch (err) {
-      if (err instanceof Error && err.name === "AbortError") {
-        setPromptError("Prompt generation cancelled");
-      } else {
-        setPromptError(err instanceof Error ? err.message : "Unknown error generating prompt");
+      if (analysisAbortControllerRef.current) {
+        analysisAbortControllerRef.current.abort();
       }
-    } finally {
-      setPromptLoading(false);
-      if (promptAbortControllerRef.current === controller) {
-        promptAbortControllerRef.current = null;
+
+      const controller = new AbortController();
+      analysisAbortControllerRef.current = controller;
+      setAnalysisLoading(true);
+      setAnalysisError(null);
+
+      try {
+        const data = await fetchTicketAnalysis(
+          category,
+          ticketId,
+          controller.signal,
+        );
+        setTickets((currentTickets) =>
+          currentTickets.map((ticket) =>
+            ticket.id === data.ticketId
+              ? {
+                  ...ticket,
+                  aiAnalysis: data.aiAnalysis,
+                }
+              : ticket,
+          ),
+        );
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") {
+          setAnalysisError("AI analysis cancelled");
+        } else {
+          setAnalysisError(
+            err instanceof Error ? err.message : "Unknown AI analysis error",
+          );
+        }
+      } finally {
+        setAnalysisLoading(false);
+        if (analysisAbortControllerRef.current === controller) {
+          analysisAbortControllerRef.current = null;
+        }
       }
-    }
-  }, []);
+    },
+    [category],
+  );
+
+  const loadImplementationPrompt = useCallback(
+    async (ticketId: number, guidance?: string) => {
+      if (promptAbortControllerRef.current) {
+        promptAbortControllerRef.current.abort();
+      }
+
+      const controller = new AbortController();
+      promptAbortControllerRef.current = controller;
+      setPromptLoading(true);
+      setPromptError(null);
+
+      try {
+        const data = await fetchImplementationPrompt(
+          ticketId,
+          controller.signal,
+          guidance,
+        );
+        setTickets((currentTickets) =>
+          currentTickets.map((ticket) =>
+            ticket.id === data.ticketId
+              ? { ...ticket, implementationPrompt: data.implementationPrompt }
+              : ticket,
+          ),
+        );
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") {
+          setPromptError("Prompt generation cancelled");
+        } else {
+          setPromptError(
+            err instanceof Error
+              ? err.message
+              : "Unknown error generating prompt",
+          );
+        }
+      } finally {
+        setPromptLoading(false);
+        if (promptAbortControllerRef.current === controller) {
+          promptAbortControllerRef.current = null;
+        }
+      }
+    },
+    [],
+  );
 
   const reset = useCallback(() => {
     if (abortControllerRef.current) {
@@ -112,47 +136,50 @@ export function useTickets(category: TicketCategory | null) {
     setSelectedTicketId(null);
   }, []);
 
-  const load = useCallback(async (ticketId?: string) => {
-    if (!category) {
-      reset();
-      return;
-    }
+  const load = useCallback(
+    async (ticketId?: string) => {
+      if (!category) {
+        reset();
+        return;
+      }
 
-    // Cancel any ongoing request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    if (analysisAbortControllerRef.current) {
-      analysisAbortControllerRef.current.abort();
-    }
+      // Cancel any ongoing request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      if (analysisAbortControllerRef.current) {
+        analysisAbortControllerRef.current.abort();
+      }
 
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-    setLoading(true);
-    setError(null);
-    setAnalysisError(null);
-    setAnalysisLoading(false);
-    setSelectedTicketId(ticketId ?? null);
-    try {
-      const data = await fetchTickets(category, ticketId, controller.signal);
-      setTickets(data.tickets);
-      setGeneratedAt(data.generatedAt);
-      if (ticketId && data.tickets.length === 1) {
-        void loadAnalysis(data.tickets[0].id);
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      setLoading(true);
+      setError(null);
+      setAnalysisError(null);
+      setAnalysisLoading(false);
+      setSelectedTicketId(ticketId ?? null);
+      try {
+        const data = await fetchTickets(category, ticketId, controller.signal);
+        setTickets(data.tickets);
+        setGeneratedAt(data.generatedAt);
+        if (ticketId && data.tickets.length === 1) {
+          void loadAnalysis(data.tickets[0].id);
+        }
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") {
+          setError("Request cancelled");
+        } else {
+          setError(err instanceof Error ? err.message : "Unknown error");
+        }
+      } finally {
+        setLoading(false);
+        if (abortControllerRef.current === controller) {
+          abortControllerRef.current = null;
+        }
       }
-    } catch (err) {
-      if (err instanceof Error && err.name === "AbortError") {
-        setError("Request cancelled");
-      } else {
-        setError(err instanceof Error ? err.message : "Unknown error");
-      }
-    } finally {
-      setLoading(false);
-      if (abortControllerRef.current === controller) {
-        abortControllerRef.current = null;
-      }
-    }
-  }, [category, loadAnalysis, reset]);
+    },
+    [category, loadAnalysis, reset],
+  );
 
   const handleStop = () => {
     if (abortControllerRef.current) {

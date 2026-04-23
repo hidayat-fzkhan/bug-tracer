@@ -19,7 +19,10 @@ function truncate(input: string, maxChars: number): string {
   return `${input.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
 }
 
-function compactText(input: string | undefined, maxChars: number): string | undefined {
+function compactText(
+  input: string | undefined,
+  maxChars: number,
+): string | undefined {
   if (!input) {
     return undefined;
   }
@@ -62,13 +65,20 @@ function decodeJsonString(value: string): string {
 
 function extractStringField(text: string, field: string): string | undefined {
   const escapedField = field.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
-  const match = new RegExp(String.raw`"${escapedField}"\s*:\s*"((?:\\.|[^"\\])*)"`).exec(text);
+  const match = new RegExp(
+    String.raw`"${escapedField}"\s*:\s*"((?:\\.|[^"\\])*)"`,
+  ).exec(text);
   return match ? decodeJsonString(match[1]) : undefined;
 }
 
-function extractStringArrayField(text: string, field: string): string[] | undefined {
+function extractStringArrayField(
+  text: string,
+  field: string,
+): string[] | undefined {
   const escapedField = field.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
-  const match = new RegExp(String.raw`"${escapedField}"\s*:\s*\[([\s\S]*?)\]`).exec(text);
+  const match = new RegExp(
+    String.raw`"${escapedField}"\s*:\s*\[([\s\S]*?)\]`,
+  ).exec(text);
 
   if (!match) {
     return undefined;
@@ -91,8 +101,14 @@ function recoverAnalysisResultFromText(
   analysisType: WorkItemAnalysisType,
 ): Partial<AIAnalysisResult> | null {
   const recovered: Partial<AIAnalysisResult> = {
-    analysisType: (extractStringField(text, "analysisType") as WorkItemAnalysisType | undefined) ?? analysisType,
-    status: (extractStringField(text, "status") as AIAnalysisResult["status"] | undefined) ?? "ready",
+    analysisType:
+      (extractStringField(text, "analysisType") as
+        | WorkItemAnalysisType
+        | undefined) ?? analysisType,
+    status:
+      (extractStringField(text, "status") as
+        | AIAnalysisResult["status"]
+        | undefined) ?? "ready",
     summary: extractStringField(text, "summary"),
     likelyCause: extractStringField(text, "likelyCause"),
     implementationApproach: extractStringField(text, "implementationApproach"),
@@ -104,14 +120,14 @@ function recoverAnalysisResultFromText(
   };
 
   const hasUsefulContent = Boolean(
-    recovered.summary
-      || recovered.likelyCause
-      || recovered.implementationApproach
-      || recovered.suspectCommits?.length
-      || recovered.recommendations?.length
-      || recovered.importantPoints?.length
-      || recovered.impactedAreas?.length
-      || recovered.dependencies?.length,
+    recovered.summary ||
+    recovered.likelyCause ||
+    recovered.implementationApproach ||
+    recovered.suspectCommits?.length ||
+    recovered.recommendations?.length ||
+    recovered.importantPoints?.length ||
+    recovered.impactedAreas?.length ||
+    recovered.dependencies?.length,
   );
 
   return hasUsefulContent ? recovered : null;
@@ -164,11 +180,15 @@ function buildBugPrompt(params: {
     ].join(" "),
     prompt: [
       `Bug title: ${params.ticketTitle}`,
-      params.ticketDescription ? `Bug description: ${params.ticketDescription}` : undefined,
+      params.ticketDescription
+        ? `Bug description: ${params.ticketDescription}`
+        : undefined,
       params.reproSteps ? `Repro steps: ${params.reproSteps}` : undefined,
       `Branch: ${params.repoBranch}`,
       `Recent commits:\n${params.commitsText || "None provided"}`,
-      params.repoContext ? `Relevant repo snippets:\n${params.repoContext}` : "Relevant repo snippets: None provided",
+      params.repoContext
+        ? `Relevant repo snippets:\n${params.repoContext}`
+        : "Relevant repo snippets: None provided",
       [
         "Return valid JSON with this exact shape:",
         '{"analysisType":"bug","status":"ready","summary":"","likelyCause":"","suspectCommits":["sha-prefix"],"recommendations":["action"],"importantPoints":["point"],"implementationApproach":"","impactedAreas":[],"dependencies":[]}',
@@ -203,11 +223,17 @@ function buildUserStoryPrompt(params: {
     ].join(" "),
     prompt: [
       `User story title: ${params.ticketTitle}`,
-      params.ticketDescription ? `User story description: ${params.ticketDescription}` : undefined,
-      params.acceptanceCriteria ? `Acceptance criteria: ${params.acceptanceCriteria}` : undefined,
+      params.ticketDescription
+        ? `User story description: ${params.ticketDescription}`
+        : undefined,
+      params.acceptanceCriteria
+        ? `Acceptance criteria: ${params.acceptanceCriteria}`
+        : undefined,
       `Branch: ${params.repoBranch}`,
       `Recent commits:\n${params.commitsText || "None provided"}`,
-      params.repoContext ? `Relevant repo snippets:\n${params.repoContext}` : "Relevant repo snippets: None provided",
+      params.repoContext
+        ? `Relevant repo snippets:\n${params.repoContext}`
+        : "Relevant repo snippets: None provided",
       [
         "Return valid JSON with this exact shape:",
         '{"analysisType":"user-story","status":"ready","summary":"","likelyCause":"","implementationApproach":"","suspectCommits":["sha-prefix"],"recommendations":["action"],"importantPoints":["point"],"impactedAreas":["area"],"dependencies":["dependency"]}',
@@ -227,17 +253,29 @@ function buildUserStoryPrompt(params: {
   };
 }
 
-function normalizeAnalysisResult(parsed: Partial<AIAnalysisResult>, fallbackText: string, analysisType: WorkItemAnalysisType): AIAnalysisResult {
+function normalizeAnalysisResult(
+  parsed: Partial<AIAnalysisResult>,
+  fallbackText: string,
+  analysisType: WorkItemAnalysisType,
+): AIAnalysisResult {
   return {
     analysisType: parsed.analysisType ?? analysisType,
     status: parsed.status ?? "ready",
     summary: parsed.summary ?? fallbackText,
     likelyCause: parsed.likelyCause,
     implementationApproach: parsed.implementationApproach,
-    suspectCommits: Array.isArray(parsed.suspectCommits) ? parsed.suspectCommits : [],
-    recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations : [],
-    importantPoints: Array.isArray(parsed.importantPoints) ? parsed.importantPoints : [],
-    impactedAreas: Array.isArray(parsed.impactedAreas) ? parsed.impactedAreas : [],
+    suspectCommits: Array.isArray(parsed.suspectCommits)
+      ? parsed.suspectCommits
+      : [],
+    recommendations: Array.isArray(parsed.recommendations)
+      ? parsed.recommendations
+      : [],
+    importantPoints: Array.isArray(parsed.importantPoints)
+      ? parsed.importantPoints
+      : [],
+    impactedAreas: Array.isArray(parsed.impactedAreas)
+      ? parsed.impactedAreas
+      : [],
     dependencies: Array.isArray(parsed.dependencies) ? parsed.dependencies : [],
   } satisfies AIAnalysisResult;
 }
@@ -256,13 +294,20 @@ export type ImplementationPromptParams = {
   repoBranch: string;
   anthropicKey: string;
   anthropicModel: string;
+  additionalGuidance?: string;
 };
 
 export async function generateImplementationPrompt(
   params: ImplementationPromptParams,
 ): Promise<string> {
-  const ticketDescription = compactText(params.ticketDescription, MAX_BUG_FIELD_CHARS);
-  const acceptanceCriteria = compactText(params.acceptanceCriteria, MAX_BUG_FIELD_CHARS);
+  const ticketDescription = compactText(
+    params.ticketDescription,
+    MAX_BUG_FIELD_CHARS,
+  );
+  const acceptanceCriteria = compactText(
+    params.acceptanceCriteria,
+    MAX_BUG_FIELD_CHARS,
+  );
   const repoContext = compactRepoContext(params.repoContext);
 
   const systemPrompt = [
@@ -286,16 +331,27 @@ export async function generateImplementationPrompt(
         params.cachedAnalysis.recommendations?.length
           ? `AI analysis — recommendations:\n${params.cachedAnalysis.recommendations.map((r) => `- ${r}`).join("\n")}`
           : undefined,
-      ].filter(Boolean).join("\n")
+      ]
+        .filter(Boolean)
+        .join("\n")
     : undefined;
 
   const userMessage = [
     `User story title: ${params.ticketTitle}`,
-    ticketDescription ? `User story description: ${ticketDescription}` : undefined,
-    acceptanceCriteria ? `Acceptance criteria: ${acceptanceCriteria}` : undefined,
+    ticketDescription
+      ? `User story description: ${ticketDescription}`
+      : undefined,
+    acceptanceCriteria
+      ? `Acceptance criteria: ${acceptanceCriteria}`
+      : undefined,
     `Target branch: ${params.repoBranch}`,
-    analysisContext ? `Prior AI analysis (use as additional context):\n${analysisContext}` : undefined,
+    analysisContext
+      ? `Prior AI analysis (use as additional context):\n${analysisContext}`
+      : undefined,
     repoContext ? `Relevant codebase context:\n${repoContext}` : undefined,
+    params.additionalGuidance
+      ? `Additional guidance from developer: ${params.additionalGuidance}`
+      : undefined,
     [
       "Generate a complete implementation prompt that a developer can paste directly into an AI coding assistant.",
       "The prompt must include:",
@@ -339,7 +395,9 @@ export function hasEnoughDataForUserStoryAnalysis(params: {
     return false;
   }
 
-  return combined.length >= 80 || combined.split(" ").filter(Boolean).length >= 12;
+  return (
+    combined.length >= 80 || combined.split(" ").filter(Boolean).length >= 12
+  );
 }
 
 export async function analyzeWithAI(
@@ -353,28 +411,35 @@ export async function analyzeWithAI(
     )
     .join("\n\n");
 
-  const ticketDescription = compactText(params.ticketDescription, MAX_BUG_FIELD_CHARS);
+  const ticketDescription = compactText(
+    params.ticketDescription,
+    MAX_BUG_FIELD_CHARS,
+  );
   const reproSteps = compactText(params.reproSteps, MAX_BUG_FIELD_CHARS);
-  const acceptanceCriteria = compactText(params.acceptanceCriteria, MAX_BUG_FIELD_CHARS);
+  const acceptanceCriteria = compactText(
+    params.acceptanceCriteria,
+    MAX_BUG_FIELD_CHARS,
+  );
   const repoContext = compactRepoContext(params.repoContext);
 
-  const { systemPrompt, prompt } = params.analysisType === "bug"
-    ? buildBugPrompt({
-        ticketTitle: params.ticketTitle,
-        ticketDescription,
-        reproSteps,
-        repoBranch: params.repoBranch,
-        commitsText,
-        repoContext,
-      })
-    : buildUserStoryPrompt({
-        ticketTitle: params.ticketTitle,
-        ticketDescription,
-        acceptanceCriteria,
-        repoBranch: params.repoBranch,
-        commitsText,
-        repoContext,
-      });
+  const { systemPrompt, prompt } =
+    params.analysisType === "bug"
+      ? buildBugPrompt({
+          ticketTitle: params.ticketTitle,
+          ticketDescription,
+          reproSteps,
+          repoBranch: params.repoBranch,
+          commitsText,
+          repoContext,
+        })
+      : buildUserStoryPrompt({
+          ticketTitle: params.ticketTitle,
+          ticketDescription,
+          acceptanceCriteria,
+          repoBranch: params.repoBranch,
+          commitsText,
+          repoContext,
+        });
 
   const anthropic = new Anthropic({ apiKey: params.anthropicKey });
   const messages: MessageParam[] = [
@@ -387,9 +452,10 @@ export async function analyzeWithAI(
   const response = await anthropic.messages.create({
     model: params.anthropicModel,
     system: systemPrompt,
-    max_tokens: params.analysisType === "bug"
-      ? MAX_OUTPUT_TOKENS_BUG
-      : MAX_OUTPUT_TOKENS_USER_STORY,
+    max_tokens:
+      params.analysisType === "bug"
+        ? MAX_OUTPUT_TOKENS_BUG
+        : MAX_OUTPUT_TOKENS_USER_STORY,
     messages,
   });
 
@@ -404,9 +470,16 @@ export async function analyzeWithAI(
     const parsed = JSON.parse(responseText) as Partial<AIAnalysisResult>;
     return normalizeAnalysisResult(parsed, responseText, params.analysisType);
   } catch {
-    const recovered = recoverAnalysisResultFromText(responseText, params.analysisType);
+    const recovered = recoverAnalysisResultFromText(
+      responseText,
+      params.analysisType,
+    );
     if (recovered) {
-      return normalizeAnalysisResult(recovered, responseText, params.analysisType);
+      return normalizeAnalysisResult(
+        recovered,
+        responseText,
+        params.analysisType,
+      );
     }
 
     return normalizeAnalysisResult({}, responseText, params.analysisType);

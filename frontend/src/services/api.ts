@@ -1,4 +1,9 @@
-import type { ApiImplementationPromptResponse, ApiTicketAnalysisResponse, ApiTicketListResponse, TicketCategory } from "../types";
+import type {
+  ApiImplementationPromptResponse,
+  ApiTicketAnalysisResponse,
+  ApiTicketListResponse,
+  TicketCategory,
+} from "../types";
 
 function getApiBase(): string {
   return import.meta.env.VITE_API_BASE || "";
@@ -40,9 +45,13 @@ export async function fetchTicketAnalysis(
 export async function fetchImplementationPrompt(
   ticketId: number,
   signal?: AbortSignal,
+  guidance?: string,
 ): Promise<ApiImplementationPromptResponse> {
   const base = getApiBase();
-  const url = `${base}/api/user-stories/${ticketId}/implementation-prompt`;
+  const params = guidance
+    ? `?additionalGuidance=${encodeURIComponent(guidance)}`
+    : "";
+  const url = `${base}/api/user-stories/${ticketId}/implementation-prompt${params}`;
   const res = await fetch(url, { signal });
   if (!res.ok) {
     const text = await res.text().catch(() => "");

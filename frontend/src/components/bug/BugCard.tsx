@@ -1,4 +1,11 @@
-import { Button, Card, CardContent, CircularProgress, Stack, Typography } from "@mui/material";
+import {
+  Button,
+  Card,
+  CardContent,
+  CircularProgress,
+  Stack,
+  Typography,
+} from "@mui/material";
 import type { ApiTicket } from "../../types";
 import { AIAnalysis } from "./AIAnalysis";
 import { BugDetails } from "./BugDetails";
@@ -13,7 +20,7 @@ type BugCardProps = {
   analysisError?: string | null;
   promptLoading?: boolean;
   promptError?: string | null;
-  onGeneratePrompt?: (ticketId: number) => void;
+  onGeneratePrompt?: (ticketId: number, guidance?: string) => void;
 };
 
 export function BugCard({
@@ -28,9 +35,7 @@ export function BugCard({
 }: BugCardProps) {
   const isBug = bug.category === "bugs";
   const showImplementationPrompt =
-    isDetailed &&
-    !isBug &&
-    bug.aiAnalysis?.status === "ready";
+    isDetailed && !isBug && bug.aiAnalysis?.status === "ready";
 
   return (
     <Card sx={{ borderLeft: "4px solid #1976d2" }}>
@@ -39,7 +44,11 @@ export function BugCard({
           <BugDetails bug={bug} isDetailed={isDetailed} />
 
           {!isDetailed && (
-            <Button variant="outlined" sx={{ alignSelf: "flex-start" }} onClick={() => onOpenBug(bug.id)}>
+            <Button
+              variant="outlined"
+              sx={{ alignSelf: "flex-start" }}
+              onClick={() => onOpenBug(bug.id)}
+            >
               {isBug ? "Open Bug Analysis" : "Open User Story Analysis"}
             </Button>
           )}
@@ -55,16 +64,20 @@ export function BugCard({
             </Stack>
           )}
 
-          {isDetailed && analysisError && <ErrorMessage message={analysisError} />}
+          {isDetailed && analysisError && (
+            <ErrorMessage message={analysisError} />
+          )}
 
-          {isDetailed && bug.aiAnalysis && <AIAnalysis analysis={bug.aiAnalysis} />}
+          {isDetailed && bug.aiAnalysis && (
+            <AIAnalysis analysis={bug.aiAnalysis} />
+          )}
 
           {showImplementationPrompt && (
             <ImplementationPrompt
               prompt={bug.implementationPrompt}
               loading={promptLoading}
               error={promptError}
-              onGenerate={() => onGeneratePrompt?.(bug.id)}
+              onGenerate={(guidance) => onGeneratePrompt?.(bug.id, guidance)}
             />
           )}
         </Stack>

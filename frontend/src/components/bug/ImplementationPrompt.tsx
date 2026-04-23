@@ -1,16 +1,32 @@
 import { useState } from "react";
-import { Box, Button, Card, CardContent, CircularProgress, Divider, Stack, Typography } from "@mui/material";
+import {
+  Box,
+  Button,
+  Card,
+  CardContent,
+  CircularProgress,
+  Divider,
+  Stack,
+  TextField,
+  Typography,
+} from "@mui/material";
 import { ErrorMessage } from "../common/ErrorMessage";
 
 type ImplementationPromptProps = Readonly<{
   prompt?: string;
   loading: boolean;
   error?: string | null;
-  onGenerate: () => void;
+  onGenerate: (guidance?: string) => void;
 }>;
 
-export function ImplementationPrompt({ prompt, loading, error, onGenerate }: ImplementationPromptProps) {
+export function ImplementationPrompt({
+  prompt,
+  loading,
+  error,
+  onGenerate,
+}: ImplementationPromptProps) {
   const [copied, setCopied] = useState(false);
+  const [guidance, setGuidance] = useState("");
 
   const handleCopy = async () => {
     if (!prompt) return;
@@ -27,15 +43,33 @@ export function ImplementationPrompt({ prompt, loading, error, onGenerate }: Imp
       </Typography>
 
       {!prompt && !loading && !error && (
-        <Button variant="outlined" sx={{ alignSelf: "flex-start" }} onClick={onGenerate}>
-          Generate Implementation Prompt
-        </Button>
+        <Stack spacing={1.5}>
+          <TextField
+            label="Additional guidance (optional)"
+            placeholder="e.g. focus on the frontend only, use React hooks, avoid touching the auth module..."
+            multiline
+            minRows={2}
+            maxRows={5}
+            size="small"
+            value={guidance}
+            onChange={(e) => setGuidance(e.target.value)}
+          />
+          <Button
+            variant="outlined"
+            sx={{ alignSelf: "flex-start" }}
+            onClick={() => onGenerate(guidance.trim() || undefined)}
+          >
+            Generate Implementation Prompt
+          </Button>
+        </Stack>
       )}
 
       {loading && (
         <Stack direction="row" spacing={1.5} alignItems="center">
           <CircularProgress size={20} />
-          <Typography variant="body2">Generating implementation prompt...</Typography>
+          <Typography variant="body2">
+            Generating implementation prompt...
+          </Typography>
         </Stack>
       )}
 
