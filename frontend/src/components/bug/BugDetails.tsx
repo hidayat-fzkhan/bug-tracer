@@ -1,95 +1,166 @@
-import { Chip, Stack, Typography } from "@mui/material";
+import { Box, Chip, Divider, Stack, Typography } from "@mui/material";
+import CalendarTodayOutlinedIcon from "@mui/icons-material/CalendarTodayOutlined";
+import PersonOutlineIcon from "@mui/icons-material/PersonOutlined";
+import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
+import LoopIcon from "@mui/icons-material/Loop";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import LocalOfferOutlinedIcon from "@mui/icons-material/LocalOfferOutlined";
 import type { ApiTicket } from "../../types";
 import { formatDate } from "../../utils/formatters";
 
-type BugDetailsProps = {
+type BugDetailsProps = Readonly<{
   bug: ApiTicket;
   isDetailed?: boolean;
-};
+}>;
+
+function MetaItem({ icon, text }: Readonly<{ icon: React.ReactNode; text: string }>) {
+  return (
+    <Stack direction="row" spacing={0.5} alignItems="center">
+      <Box sx={{ color: "text.disabled", display: "flex", alignItems: "center" }}>{icon}</Box>
+      <Typography variant="body2" color="text.secondary">
+        {text}
+      </Typography>
+    </Stack>
+  );
+}
+
+function getStateColor(state: string): "primary" | "success" | "secondary" | "default" {
+  const s = state.toLowerCase();
+  if (s === "active" || s === "in progress") return "primary";
+  if (s === "new") return "success";
+  if (s === "resolved" || s === "done") return "secondary";
+  return "default";
+}
+
+function SectionHeading({ children }: Readonly<{ children: React.ReactNode }>) {
+  return (
+    <Typography
+      variant="subtitle2"
+      fontWeight={600}
+      sx={{ color: "text.primary", mt: 0.5 }}
+    >
+      {children}
+    </Typography>
+  );
+}
 
 export function BugDetails({ bug, isDetailed = false }: BugDetailsProps) {
   const isBug = bug.category === "bugs";
 
   return (
     <>
-      <Stack direction={{ xs: "column", md: "row" }} spacing={1} alignItems="baseline">
-        <Typography variant="h6">{bug.title}</Typography>
-        <Chip size="small" label={`#${bug.id}`} />
-        <Chip size="small" label={bug.workItemType} color="default" />
-        {bug.state && <Chip size="small" label={bug.state} color="info" />}
+      <Stack spacing={0.75}>
+        <Typography variant="h6" fontWeight={600} sx={{ lineHeight: 1.3 }}>
+          {bug.title}
+        </Typography>
+
+        <Stack direction="row" flexWrap="wrap" gap={0.75} alignItems="center">
+          <Chip size="small" label={`#${bug.id}`} variant="outlined" sx={{ fontWeight: 600 }} />
+          <Chip size="small" label={bug.workItemType} />
+          {bug.state && (
+            <Chip size="small" label={bug.state} color={getStateColor(bug.state)} />
+          )}
+        </Stack>
       </Stack>
 
-      <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+      <Stack direction="row" flexWrap="wrap" gap={2} sx={{ mt: 0.5 }}>
         {bug.createdDate && (
-          <Typography variant="body2">
-            Created: {formatDate(bug.createdDate)}
-          </Typography>
+          <MetaItem
+            icon={<CalendarTodayOutlinedIcon sx={{ fontSize: 14 }} />}
+            text={formatDate(bug.createdDate)}
+          />
         )}
         {bug.assignedTo && (
-          <Typography variant="body2">Assigned: {bug.assignedTo}</Typography>
+          <MetaItem
+            icon={<PersonOutlineIcon sx={{ fontSize: 14 }} />}
+            text={bug.assignedTo}
+          />
         )}
         {bug.areaPath && (
-          <Typography variant="body2">Area: {bug.areaPath}</Typography>
+          <MetaItem
+            icon={<FolderOutlinedIcon sx={{ fontSize: 14 }} />}
+            text={bug.areaPath}
+          />
         )}
         {bug.iterationPath && (
-          <Typography variant="body2">Iteration: {bug.iterationPath}</Typography>
+          <MetaItem
+            icon={<LoopIcon sx={{ fontSize: 14 }} />}
+            text={bug.iterationPath}
+          />
         )}
       </Stack>
 
       {bug.tags && (
-        <Typography variant="body2">Tags: {bug.tags}</Typography>
+        <Stack direction="row" flexWrap="wrap" gap={0.5} alignItems="center">
+          <LocalOfferOutlinedIcon sx={{ fontSize: 14, color: "text.disabled" }} />
+          {bug.tags.split(/[;,]/).map((tag) =>
+            tag.trim() ? (
+              <Chip key={tag.trim()} label={tag.trim()} size="small" variant="outlined" sx={{ height: 20, fontSize: 11 }} />
+            ) : null
+          )}
+        </Stack>
       )}
 
       {bug.webUrl && (
-        <Typography variant="body2">
-          <a href={bug.webUrl} target="_blank" rel="noreferrer">
+        <Box>
+          <Typography
+            component="a"
+            href={bug.webUrl}
+            target="_blank"
+            rel="noreferrer"
+            variant="body2"
+            sx={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 0.5,
+              color: "primary.main",
+              textDecoration: "none",
+              "&:hover": { textDecoration: "underline" },
+            }}
+          >
             Open in Azure DevOps
-          </a>
-        </Typography>
+            <OpenInNewIcon sx={{ fontSize: 13 }} />
+          </Typography>
+        </Box>
       )}
 
       {bug.summary && !isDetailed && (
-        <>
-          <Typography variant="h5" sx={{ whiteSpace: "pre-line" }}>
-            Summary
-          </Typography>
-          <Typography variant="body1" sx={{ whiteSpace: "pre-line" }}>
+        <Box>
+          <SectionHeading>Summary</SectionHeading>
+          <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: "pre-line", mt: 0.5 }}>
             {bug.summary}
           </Typography>
-        </>
+        </Box>
       )}
 
       {isDetailed && bug.description && (
-        <>
-          <Typography variant="h5" sx={{ whiteSpace: "pre-line" }}>
-            {isBug ? "Bug Description" : "User Story Description"}
-          </Typography>
-          <Typography variant="body1" sx={{ whiteSpace: "pre-line" }}>
+        <Box>
+          <Divider sx={{ my: 1.5 }} />
+          <SectionHeading>{isBug ? "Bug Description" : "User Story Description"}</SectionHeading>
+          <Typography variant="body2" sx={{ whiteSpace: "pre-line", mt: 0.5 }}>
             {bug.description}
           </Typography>
-        </>
+        </Box>
       )}
 
       {isDetailed && isBug && bug.reproSteps && (
-        <>
-          <Typography variant="h5" sx={{ whiteSpace: "pre-line" }}>
-            Repro Steps / Additional Azure Details
-          </Typography>
-          <Typography variant="body1" sx={{ whiteSpace: "pre-line" }}>
+        <Box>
+          <Divider sx={{ my: 1.5 }} />
+          <SectionHeading>Repro Steps / Additional Details</SectionHeading>
+          <Typography variant="body2" sx={{ whiteSpace: "pre-line", mt: 0.5 }}>
             {bug.reproSteps}
           </Typography>
-        </>
+        </Box>
       )}
 
       {isDetailed && !isBug && bug.acceptanceCriteria && (
-        <>
-          <Typography variant="h5" sx={{ whiteSpace: "pre-line" }}>
-            Acceptance Criteria
-          </Typography>
-          <Typography variant="body1" sx={{ whiteSpace: "pre-line" }}>
+        <Box>
+          <Divider sx={{ my: 1.5 }} />
+          <SectionHeading>Acceptance Criteria</SectionHeading>
+          <Typography variant="body2" sx={{ whiteSpace: "pre-line", mt: 0.5 }}>
             {bug.acceptanceCriteria}
           </Typography>
-        </>
+        </Box>
       )}
     </>
   );

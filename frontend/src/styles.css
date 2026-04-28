@@ -5,9 +5,30 @@
 
 body {
   margin: 0;
-  background: #f7f8fa;
+  background: #f0f2f5;
 }
 
 #root {
   min-height: 100vh;
+}
+
+/* Smooth transitions on interactive elements */
+a {
+  transition: color 0.15s;
+}
+
+/* Better scrollbar styling on webkit */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.35);
 }

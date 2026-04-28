@@ -1,4 +1,11 @@
-import { Box, Card, CardContent, Divider, Stack, Typography } from "@mui/material";
+import { Box, Card, CardContent, Chip, Divider, Stack, Typography } from "@mui/material";
+import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
+import CommitIcon from "@mui/icons-material/Commit";
+import LightbulbOutlinedIcon from "@mui/icons-material/LightbulbOutlined";
+import BugReportOutlinedIcon from "@mui/icons-material/BugReportOutlined";
+import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
+import ChecklistOutlinedIcon from "@mui/icons-material/ChecklistOutlined";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import type { ApiTicket } from "../../types";
 
 type AIAnalysisProps = Readonly<{
@@ -29,22 +36,10 @@ function isStructuredObject(value: unknown): value is StructuredObject {
 }
 
 function isStructuredValue(value: unknown): value is StructuredValue {
-  if (value == null) {
-    return true;
-  }
-
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-    return true;
-  }
-
-  if (Array.isArray(value)) {
-    return value.every((item) => isStructuredValue(item));
-  }
-
-  if (isStructuredObject(value)) {
-    return Object.values(value).every((item) => isStructuredValue(item));
-  }
-
+  if (value == null) return true;
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return true;
+  if (Array.isArray(value)) return value.every((item) => isStructuredValue(item));
+  if (isStructuredObject(value)) return Object.values(value).every((item) => isStructuredValue(item));
   return false;
 }
 
@@ -57,18 +52,11 @@ function decodeJsonString(value: string): string {
 }
 
 function tryParseStructuredSummary(summary: unknown): StructuredValue | null {
-  if (isStructuredValue(summary) && typeof summary !== "string") {
-    return summary;
-  }
-
-  if (typeof summary !== "string") {
-    return null;
-  }
+  if (isStructuredValue(summary) && typeof summary !== "string") return summary;
+  if (typeof summary !== "string") return null;
 
   const trimmed = summary.trim();
-  if (!trimmed || (!trimmed.startsWith("{") && !trimmed.startsWith("["))) {
-    return null;
-  }
+  if (!trimmed || (!trimmed.startsWith("{") && !trimmed.startsWith("["))) return null;
 
   try {
     const parsed = JSON.parse(trimmed) as unknown;
@@ -79,32 +67,17 @@ function tryParseStructuredSummary(summary: unknown): StructuredValue | null {
 }
 
 function tryExtractSummaryField(summary: unknown): string | null {
-  if (typeof summary !== "string") {
-    return null;
-  }
-
+  if (typeof summary !== "string") return null;
   const match = /"summary"\s*:\s*"((?:\\.|[^"\\])*)"/.exec(summary);
   return match ? decodeJsonString(match[1]) : null;
 }
 
 function getPlainSummaryText(summary: unknown): string {
   const extractedSummary = tryExtractSummaryField(summary);
-  if (extractedSummary) {
-    return extractedSummary;
-  }
-
-  if (typeof summary === "string") {
-    return summary;
-  }
-
-  if (typeof summary === "number" || typeof summary === "boolean") {
-    return String(summary);
-  }
-
-  if (summary == null) {
-    return "";
-  }
-
+  if (extractedSummary) return extractedSummary;
+  if (typeof summary === "string") return summary;
+  if (typeof summary === "number" || typeof summary === "boolean") return String(summary);
+  if (summary == null) return "";
   if (Array.isArray(summary) || isStructuredObject(summary)) {
     try {
       return JSON.stringify(summary, null, 2);
@@ -112,14 +85,11 @@ function getPlainSummaryText(summary: unknown): string {
       return "";
     }
   }
-
   return "";
 }
 
 function renderStructuredValue(value: StructuredValue, path: string): React.ReactNode {
-  if (value == null) {
-    return null;
-  }
+  if (value == null) return null;
 
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
     return (
@@ -146,7 +116,7 @@ function renderStructuredValue(value: StructuredValue, path: string): React.Reac
     <Stack spacing={1}>
       {entries.map(([key, nestedValue]) => (
         <Box key={`${path}.${key}`}>
-          <Typography variant="caption" fontWeight={600}>
+          <Typography variant="caption" fontWeight={600} color="text.secondary">
             {toReadableLabel(key)}
           </Typography>
           <Box sx={{ mt: 0.5 }}>{renderStructuredValue(nestedValue, `${path}.${key}`)}</Box>
@@ -156,17 +126,45 @@ function renderStructuredValue(value: StructuredValue, path: string): React.Reac
   );
 }
 
+function AnalysisSection({
+  icon,
+  label,
+  children,
+}: Readonly<{ icon: React.ReactNode; label: string; children: React.ReactNode }>) {
+  return (
+    <Box
+      sx={{
+        borderLeft: "3px solid",
+        borderColor: "divider",
+        pl: 1.5,
+        py: 0.25,
+      }}
+    >
+      <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mb: 0.75 }}>
+        <Box sx={{ color: "primary.main", display: "flex", alignItems: "center" }}>{icon}</Box>
+        <Typography variant="subtitle2" fontWeight={700} color="text.primary">
+          {label}
+        </Typography>
+      </Stack>
+      {children}
+    </Box>
+  );
+}
+
 export function AIAnalysis({ analysis }: AIAnalysisProps) {
   if (analysis.status === "not-enough-data") {
     return (
       <>
         <Divider sx={{ mt: 2 }} />
-        <Typography variant="h5" sx={{ mt: 2 }}>
-          AI Analysis
-        </Typography>
-        <Card variant="outlined" sx={{ backgroundColor: "#f5f5f5" }}>
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 2 }}>
+          <PsychologyOutlinedIcon color="primary" />
+          <Typography variant="h6" fontWeight={700}>AI Analysis</Typography>
+        </Stack>
+        <Card variant="outlined" sx={{ backgroundColor: "#f9f9fb" }}>
           <CardContent>
-            <Typography variant="body2">Not enough data for AI analysis.</Typography>
+            <Typography variant="body2" color="text.secondary">
+              Not enough data for AI analysis.
+            </Typography>
           </CardContent>
         </Card>
       </>
@@ -180,124 +178,136 @@ export function AIAnalysis({ analysis }: AIAnalysisProps) {
   return (
     <>
       <Divider sx={{ mt: 2 }} />
-      <Typography variant="h5" sx={{ mt: 2 }}>
-        AI Analysis
-      </Typography>
-      <Card variant="outlined" sx={{ backgroundColor: "#f5f5f5" }}>
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 2, mb: 0.5 }}>
+        <PsychologyOutlinedIcon color="primary" />
+        <Typography variant="h6" fontWeight={700}>AI Analysis</Typography>
+        {analysis.status === "ready" && (
+          <Chip label="Ready" color="success" size="small" sx={{ ml: 0.5 }} />
+        )}
+      </Stack>
+
+      <Card variant="outlined" sx={{ backgroundColor: "#f9f9fb" }}>
         <CardContent>
-          <Stack spacing={1.5}>
-            <Box>
-              <Typography variant="caption" fontWeight={600}>
-                {isBug ? "Why Is This Bug Happening?" : "What Is This User Story Asking For?"}
-              </Typography>
-              <Box sx={{ mt: 0.5 }}>
-                {!isBug && structuredSummary ? (
-                  renderStructuredValue(structuredSummary, "summary")
-                ) : (
-                  <Typography variant="body2" sx={{ whiteSpace: "pre-line" }}>
-                    {plainSummaryText}
-                  </Typography>
-                )}
-              </Box>
-            </Box>
+          <Stack spacing={2}>
+            <AnalysisSection
+              icon={<PsychologyOutlinedIcon fontSize="small" />}
+              label={isBug ? "Why Is This Bug Happening?" : "What Is This User Story Asking For?"}
+            >
+              {!isBug && structuredSummary ? (
+                renderStructuredValue(structuredSummary, "summary")
+              ) : (
+                <Typography variant="body2" sx={{ whiteSpace: "pre-line" }}>
+                  {plainSummaryText}
+                </Typography>
+              )}
+            </AnalysisSection>
 
             {isBug && analysis.likelyCause && (
-              <Box>
-                <Typography variant="caption" fontWeight={600}>
-                  What Could Be The Issue?
-                </Typography>
+              <AnalysisSection
+                icon={<BugReportOutlinedIcon fontSize="small" />}
+                label="What Could Be The Issue?"
+              >
                 <Typography variant="body2">{analysis.likelyCause}</Typography>
-              </Box>
+              </AnalysisSection>
             )}
 
             {!isBug && analysis.implementationApproach && (
-              <Box>
-                <Typography variant="caption" fontWeight={600}>
-                  Suggested Implementation Approach
-                </Typography>
+              <AnalysisSection
+                icon={<LightbulbOutlinedIcon fontSize="small" />}
+                label="Suggested Implementation Approach"
+              >
                 <Typography variant="body2">{analysis.implementationApproach}</Typography>
-              </Box>
+              </AnalysisSection>
             )}
 
             {!isBug && (analysis.impactedAreas?.length ?? 0) > 0 && (
-              <Box>
-                <Typography variant="caption" fontWeight={600}>
-                  Likely Impacted Areas
-                </Typography>
+              <AnalysisSection
+                icon={<AccountTreeOutlinedIcon fontSize="small" />}
+                label="Likely Impacted Areas"
+              >
                 <Stack component="ul" spacing={0.5} sx={{ m: 0, pl: 2 }}>
-                  {analysis.impactedAreas?.map((area, index) => (
+                  {analysis.impactedAreas?.map((area) => (
                     <Typography key={area} variant="body2" component="li">
                       {area}
                     </Typography>
                   ))}
                 </Stack>
-              </Box>
+              </AnalysisSection>
             )}
 
             {!isBug && (analysis.dependencies?.length ?? 0) > 0 && (
-              <Box>
-                <Typography variant="caption" fontWeight={600}>
-                  Dependencies / Preconditions
-                </Typography>
+              <AnalysisSection
+                icon={<AccountTreeOutlinedIcon fontSize="small" />}
+                label="Dependencies / Preconditions"
+              >
                 <Stack component="ul" spacing={0.5} sx={{ m: 0, pl: 2 }}>
-                  {analysis.dependencies?.map((dependency, index) => (
+                  {analysis.dependencies?.map((dependency) => (
                     <Typography key={dependency} variant="body2" component="li">
                       {dependency}
                     </Typography>
                   ))}
                 </Stack>
-              </Box>
+              </AnalysisSection>
             )}
 
             {analysis.suspectCommits.length > 0 && (
-              <Box>
-                <Typography variant="caption" fontWeight={600}>
-                  {isBug ? "Related Recent Commit(s)" : "Potentially Relevant Recent Commit(s)"}
-                </Typography>
+              <AnalysisSection
+                icon={<CommitIcon fontSize="small" />}
+                label={isBug ? "Related Recent Commit(s)" : "Potentially Relevant Recent Commit(s)"}
+              >
                 <Stack spacing={0.5}>
-                  {analysis.suspectCommits.map((commit, idx) => (
-                    <Typography key={commit.sha} variant="body2">
+                  {analysis.suspectCommits.map((commit) => (
+                    <Typography key={commit.sha} variant="body2" sx={{ fontFamily: "monospace", fontSize: 12 }}>
                       {commit.url ? (
-                        <a href={commit.url} target="_blank" rel="noreferrer">
-                          {commit.sha}
-                        </a>
+                        <Box
+                          component="a"
+                          href={commit.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          sx={{ color: "primary.main", textDecoration: "none", "&:hover": { textDecoration: "underline" } }}
+                        >
+                          {commit.sha.slice(0, 8)}
+                        </Box>
                       ) : (
-                        commit.sha
+                        commit.sha.slice(0, 8)
                       )}
+                      <Box component="span" sx={{ ml: 1, fontFamily: "inherit", fontSize: 13, color: "text.secondary" }}>
+                        {commit.sha.slice(8)}
+                      </Box>
                     </Typography>
                   ))}
                 </Stack>
-              </Box>
+              </AnalysisSection>
             )}
 
             {analysis.recommendations.length > 0 && (
-              <Box>
-                <Typography variant="caption" fontWeight={600}>
-                  {isBug ? "How To Fix It" : "Implementation Recommendations"}
-                </Typography>
+              <AnalysisSection
+                icon={<ChecklistOutlinedIcon fontSize="small" />}
+                label={isBug ? "How To Fix It" : "Implementation Recommendations"}
+              >
                 <Stack component="ul" spacing={0.5} sx={{ m: 0, pl: 2 }}>
-                  {analysis.recommendations.map((rec, i) => (
+                  {analysis.recommendations.map((rec) => (
                     <Typography key={rec} variant="body2" component="li">
                       {rec}
                     </Typography>
                   ))}
                 </Stack>
-              </Box>
+              </AnalysisSection>
             )}
 
             {(analysis.importantPoints?.length ?? 0) > 0 && (
-              <Box>
-                <Typography variant="caption" fontWeight={600}>
-                  Other Important Points
-                </Typography>
+              <AnalysisSection
+                icon={<InfoOutlinedIcon fontSize="small" />}
+                label="Other Important Points"
+              >
                 <Stack component="ul" spacing={0.5} sx={{ m: 0, pl: 2 }}>
-                  {analysis.importantPoints?.map((point, i) => (
+                  {analysis.importantPoints?.map((point) => (
                     <Typography key={point} variant="body2" component="li">
                       {point}
                     </Typography>
                   ))}
                 </Stack>
-              </Box>
+              </AnalysisSection>
             )}
           </Stack>
         </CardContent>

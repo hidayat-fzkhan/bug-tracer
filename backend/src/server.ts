@@ -94,6 +94,15 @@ function buildCacheKey(params: {
   ].join("::");
 }
 
+function serializeError(err: unknown): string {
+  if (!(err instanceof Error)) return "Unknown error";
+  const cause = (err as NodeJS.ErrnoException & { cause?: unknown }).cause;
+  if (cause instanceof Error) {
+    return `${err.message}: ${cause.message}`;
+  }
+  return err.message;
+}
+
 function getCachedAnalysis(cacheKey: string) {
   const cached = analysisCache.get(cacheKey);
   if (!cached) {
@@ -428,7 +437,8 @@ function registerCategoryRoutes(params: {
         [params.listKey]: response,
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown error";
+      console.error(`[error] route=/api/${params.route}`, err);
+      const message = serializeError(err);
       res.status(500).json({ error: message });
     }
   });
@@ -472,7 +482,8 @@ function registerCategoryRoutes(params: {
         aiAnalysis,
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown error";
+      console.error(`[error] route=/api/${params.route}/:ticketId/analysis`, err);
+      const message = serializeError(err);
       res.status(500).json({ error: message });
     }
   });
@@ -604,7 +615,8 @@ app.get(
         implementationPrompt,
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown error";
+      console.log("ERR -> ", err);
+      const message = serializeError(err);
       res.status(500).json({ error: message });
     }
   },

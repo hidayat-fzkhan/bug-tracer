@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
-import { Button, Card, CardContent, Stack, Typography } from "@mui/material";
+import { Box, Button, Card, CardContent, Chip, Stack, Typography } from "@mui/material";
+import BugReportOutlinedIcon from "@mui/icons-material/BugReportOutlined";
+import AutoStoriesOutlinedIcon from "@mui/icons-material/AutoStoriesOutlined";
+import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
 import { BugList } from "./components/bug/BugList";
 import { EmptyState } from "./components/common/EmptyState";
 import { ErrorMessage } from "./components/common/ErrorMessage";
@@ -176,28 +179,78 @@ export default function App() {
   const selectedTicket = tickets.length === 1 && selectedTicketId ? tickets[0] : null;
 
   const renderWelcomePage = () => (
-    <Card>
-      <CardContent>
-        <Stack spacing={3} alignItems="flex-start">
-          <Stack spacing={1}>
-            <Typography variant="h4">Welcome to BugTracer</Typography>
-            <Typography color="text.secondary">
-              Choose what you want to analyze from Azure DevOps. Bugs and defects focus on investigation.
-              User stories focus on implementation guidance.
-            </Typography>
-          </Stack>
-
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-            <Button variant="contained" size="large" onClick={() => handleHeaderNavigate("/bugs")}>
-              Show Bugs
-            </Button>
-            <Button variant="outlined" size="large" onClick={() => handleHeaderNavigate("/user-stories")}>
-              Show User Stories
-            </Button>
-          </Stack>
+    <Stack spacing={4}>
+      <Box>
+        <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 1 }}>
+          <PsychologyOutlinedIcon sx={{ fontSize: 36, color: "primary.main" }} />
+          <Typography variant="h4" fontWeight={700}>
+            Welcome to BugTracer
+          </Typography>
         </Stack>
-      </CardContent>
-    </Card>
+        <Typography color="text.secondary" sx={{ maxWidth: 560 }}>
+          Pull work items from Azure DevOps, enrich them with GitHub commit history, and get
+          AI-powered triage and implementation guidance via Claude.
+        </Typography>
+      </Box>
+
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+        <Card
+          sx={{
+            flex: 1,
+            cursor: "pointer",
+            border: "1px solid",
+            borderColor: "divider",
+            transition: "box-shadow 0.2s, border-color 0.2s",
+            "&:hover": { boxShadow: 4, borderColor: "primary.main" },
+          }}
+          onClick={() => handleHeaderNavigate("/bugs")}
+        >
+          <CardContent sx={{ p: 3 }}>
+            <Stack spacing={1.5}>
+              <BugReportOutlinedIcon sx={{ fontSize: 32, color: "error.main" }} />
+              <Box>
+                <Typography variant="h6" fontWeight={600}>
+                  Bugs &amp; Defects
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  Investigate bugs with AI root-cause analysis, suspect commit identification, and
+                  targeted fix recommendations.
+                </Typography>
+              </Box>
+              <Chip label="Open Bugs" color="error" variant="outlined" size="small" sx={{ alignSelf: "flex-start" }} />
+            </Stack>
+          </CardContent>
+        </Card>
+
+        <Card
+          sx={{
+            flex: 1,
+            cursor: "pointer",
+            border: "1px solid",
+            borderColor: "divider",
+            transition: "box-shadow 0.2s, border-color 0.2s",
+            "&:hover": { boxShadow: 4, borderColor: "primary.main" },
+          }}
+          onClick={() => handleHeaderNavigate("/user-stories")}
+        >
+          <CardContent sx={{ p: 3 }}>
+            <Stack spacing={1.5}>
+              <AutoStoriesOutlinedIcon sx={{ fontSize: 32, color: "primary.main" }} />
+              <Box>
+                <Typography variant="h6" fontWeight={600}>
+                  User Stories
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  Get AI implementation guidance, impacted area analysis, and generate Claude prompts
+                  ready to use in your IDE.
+                </Typography>
+              </Box>
+              <Chip label="Open Stories" color="primary" variant="outlined" size="small" sx={{ alignSelf: "flex-start" }} />
+            </Stack>
+          </CardContent>
+        </Card>
+      </Stack>
+    </Stack>
   );
 
   return (
@@ -208,7 +261,7 @@ export default function App() {
         ) : (
           <>
             <Stack spacing={1}>
-              <Typography variant="h4">{categoryMeta?.title}</Typography>
+              <Typography variant="h5" fontWeight={700}>{categoryMeta?.title}</Typography>
               <SearchBar
                 label={categoryMeta?.searchLabel ?? "Search by Ticket ID"}
                 placeholder={categoryMeta?.searchPlaceholder ?? "e.g. 2689652"}
@@ -229,8 +282,8 @@ export default function App() {
             )}
 
             {selectedTicket && (
-              <Button variant="text" onClick={showLatestTickets} sx={{ alignSelf: "flex-start" }}>
-                {categoryMeta?.backLabel}
+              <Button variant="text" onClick={showLatestTickets} sx={{ alignSelf: "flex-start", pl: 0 }}>
+                ← {categoryMeta?.backLabel}
               </Button>
             )}
 

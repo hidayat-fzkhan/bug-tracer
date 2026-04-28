@@ -1,4 +1,5 @@
 import {
+  Box,
   Button,
   Card,
   CardContent,
@@ -6,13 +7,14 @@ import {
   Stack,
   Typography,
 } from "@mui/material";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import type { ApiTicket } from "../../types";
 import { AIAnalysis } from "./AIAnalysis";
 import { BugDetails } from "./BugDetails";
 import { ImplementationPrompt } from "./ImplementationPrompt";
 import { ErrorMessage } from "../common/ErrorMessage";
 
-type BugCardProps = {
+type BugCardProps = Readonly<{
   bug: ApiTicket;
   isDetailed?: boolean;
   onOpenBug: (bugId: number) => void;
@@ -21,7 +23,16 @@ type BugCardProps = {
   promptLoading?: boolean;
   promptError?: string | null;
   onGeneratePrompt?: (ticketId: number, guidance?: string) => void;
-};
+}>;
+
+function getStateBorderColor(state?: string): string {
+  const s = state?.toLowerCase() ?? "";
+  if (s === "active" || s === "in progress") return "#1976d2";
+  if (s === "new") return "#2e7d32";
+  if (s === "resolved" || s === "done") return "#7b1fa2";
+  if (s === "closed" || s === "removed") return "#757575";
+  return "#1976d2";
+}
 
 export function BugCard({
   bug,
@@ -36,30 +47,40 @@ export function BugCard({
   const isBug = bug.category === "bugs";
   const showImplementationPrompt =
     isDetailed && !isBug && bug.aiAnalysis?.status === "ready";
+  const borderColor = getStateBorderColor(bug.state);
 
   return (
-    <Card sx={{ borderLeft: "4px solid #1976d2" }}>
-      <CardContent>
-        <Stack spacing={1.5}>
+    <Card
+      sx={{
+        borderLeft: `4px solid ${borderColor}`,
+        transition: "box-shadow 0.2s",
+        "&:hover": { boxShadow: isDetailed ? undefined : 3 },
+      }}
+    >
+      <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+        <Stack spacing={2}>
           <BugDetails bug={bug} isDetailed={isDetailed} />
 
           {!isDetailed && (
-            <Button
-              variant="outlined"
-              sx={{ alignSelf: "flex-start" }}
-              onClick={() => onOpenBug(bug.id)}
-            >
-              {isBug ? "Open Bug Analysis" : "Open User Story Analysis"}
-            </Button>
+            <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
+              <Button
+                variant="contained"
+                size="small"
+                endIcon={<OpenInNewIcon fontSize="small" />}
+                onClick={() => onOpenBug(bug.id)}
+              >
+                {isBug ? "Analyze Bug" : "Analyze Story"}
+              </Button>
+            </Box>
           )}
 
           {isDetailed && analysisLoading && (
-            <Stack direction="row" spacing={1.5} alignItems="center">
-              <CircularProgress size={20} />
-              <Typography variant="body2">
+            <Stack direction="row" spacing={1.5} alignItems="center" sx={{ py: 1 }}>
+              <CircularProgress size={18} thickness={4} />
+              <Typography variant="body2" color="text.secondary">
                 {isBug
-                  ? "AI is analyzing this bug and repository context..."
-                  : "AI is analyzing this user story and repository context..."}
+                  ? "AI is analyzing this bug and repository context…"
+                  : "AI is analyzing this user story and repository context…"}
               </Typography>
             </Stack>
           )}

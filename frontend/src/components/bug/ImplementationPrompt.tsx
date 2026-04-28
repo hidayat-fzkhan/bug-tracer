@@ -10,6 +10,9 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import AutoFixHighOutlinedIcon from "@mui/icons-material/AutoFixHighOutlined";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import CheckIcon from "@mui/icons-material/Check";
 import { ErrorMessage } from "../common/ErrorMessage";
 
 type ImplementationPromptProps = Readonly<{
@@ -38,15 +41,18 @@ export function ImplementationPrompt({
   return (
     <>
       <Divider sx={{ mt: 2 }} />
-      <Typography variant="h5" sx={{ mt: 2 }}>
-        Prompt to Implement
-      </Typography>
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 2 }}>
+        <AutoFixHighOutlinedIcon color="primary" />
+        <Typography variant="h6" fontWeight={700}>
+          Prompt to Implement
+        </Typography>
+      </Stack>
 
       {!prompt && !loading && !error && (
         <Stack spacing={1.5}>
           <TextField
             label="Additional guidance (optional)"
-            placeholder="e.g. focus on the frontend only, use React hooks, avoid touching the auth module..."
+            placeholder="e.g. focus on the frontend only, use React hooks, avoid touching the auth module…"
             multiline
             minRows={2}
             maxRows={5}
@@ -55,7 +61,9 @@ export function ImplementationPrompt({
             onChange={(e) => setGuidance(e.target.value)}
           />
           <Button
-            variant="outlined"
+            variant="contained"
+            color="primary"
+            startIcon={<AutoFixHighOutlinedIcon />}
             sx={{ alignSelf: "flex-start" }}
             onClick={() => onGenerate(guidance.trim() || undefined)}
           >
@@ -65,10 +73,10 @@ export function ImplementationPrompt({
       )}
 
       {loading && (
-        <Stack direction="row" spacing={1.5} alignItems="center">
-          <CircularProgress size={20} />
-          <Typography variant="body2">
-            Generating implementation prompt...
+        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ py: 1 }}>
+          <CircularProgress size={18} thickness={4} />
+          <Typography variant="body2" color="text.secondary">
+            Generating implementation prompt…
           </Typography>
         </Stack>
       )}
@@ -76,13 +84,18 @@ export function ImplementationPrompt({
       {error && !loading && <ErrorMessage message={error} />}
 
       {prompt && !loading && (
-        <Card variant="outlined" sx={{ backgroundColor: "#f5f5f5" }}>
+        <Card
+          variant="outlined"
+          sx={{ backgroundColor: "#f9f9fb", borderColor: "primary.light" }}
+        >
           <CardContent>
             <Stack spacing={1.5}>
               <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
                 <Button
                   size="small"
-                  variant="outlined"
+                  variant={copied ? "contained" : "outlined"}
+                  color={copied ? "success" : "primary"}
+                  startIcon={copied ? <CheckIcon /> : <ContentCopyIcon />}
                   onClick={() => void handleCopy()}
                 >
                   {copied ? "Copied!" : "Copy to Clipboard"}
@@ -94,8 +107,11 @@ export function ImplementationPrompt({
                 sx={{
                   whiteSpace: "pre-wrap",
                   wordBreak: "break-word",
-                  fontFamily: "inherit",
+                  fontFamily: "'Fira Mono', 'Cascadia Code', 'Consolas', monospace",
+                  fontSize: 12.5,
+                  lineHeight: 1.7,
                   m: 0,
+                  color: "text.primary",
                 }}
               >
                 {prompt}
