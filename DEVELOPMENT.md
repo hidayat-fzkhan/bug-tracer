@@ -11,7 +11,7 @@ This is a personal side project for bug triage automation. This guide covers dev
 ```bash
 # Clone the repo
 git clone <repo-url>
-cd bug-tracer
+cd devlens
 
 # Install all dependencies
 cd backend && npm install && cd ..

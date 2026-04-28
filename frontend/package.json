@@ -1,6 +1,6 @@
 {
-  "name": "bug-tracer-ui",
-  "description": "BugTracer Web UI - React + Material-UI interface for bug analysis",
+  "name": "devlens-ui",
+  "description": "DevLens Web UI - React + Material-UI interface for AI-powered work item analysis",
   "version": "1.0.0",
   "private": true,
   "type": "module",

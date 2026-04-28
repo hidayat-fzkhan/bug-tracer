@@ -623,5 +623,5 @@ app.get(
 );
 
 app.listen(port, () => {
-  console.log(`BugTracer API running on http://localhost:${port}`);
+  console.log(`DevLens API running on http://localhost:${port}`);
 });

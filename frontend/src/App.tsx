@@ -184,7 +184,7 @@ export default function App() {
         <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 1 }}>
           <PsychologyOutlinedIcon sx={{ fontSize: 36, color: "primary.main" }} />
           <Typography variant="h4" fontWeight={700}>
-            Welcome to BugTracer
+            Welcome to DevLens
           </Typography>
         </Stack>
         <Typography color="text.secondary" sx={{ maxWidth: 560 }}>

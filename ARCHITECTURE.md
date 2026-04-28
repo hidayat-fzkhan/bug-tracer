@@ -1,8 +1,8 @@
-# BugTracer Architecture
+# DevLens Architecture
 
 ## Overview
 
-BugTracer is a two-tier web application that pulls work items from Azure DevOps (ADO/TFS), enriches them with recent GitHub commit history, and runs AI triage via the Anthropic Claude API. It supports two work item categories: **bugs** and **user stories**.
+DevLens is a two-tier web application that pulls work items from Azure DevOps (ADO/TFS), enriches them with recent GitHub commit history, and runs AI triage via the Anthropic Claude API. It supports two work item categories: **bugs** and **user stories**.
 
 ---
 

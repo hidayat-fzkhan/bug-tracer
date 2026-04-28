@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-BugTracer is a two-tier web app that pulls work items from Azure DevOps (TFS), enriches them with recent GitHub commits, and runs AI triage via the Anthropic Claude API. It supports two work item categories: **bugs** and **user stories**.
+DevLens is a two-tier web app that pulls work items from Azure DevOps (TFS), enriches them with recent GitHub commits, and runs AI triage via the Anthropic Claude API. It supports two work item categories: **bugs** and **user stories**.
 
 ## Commands
 

@@ -41,7 +41,7 @@ export function Header({ currentPath, onNavigate }: HeaderProps) {
               component="div"
               sx={{ lineHeight: 1.1, fontWeight: 700, letterSpacing: "-0.3px" }}
             >
-              BugTracer
+              DevLens
             </Typography>
             <Typography
               variant="caption"

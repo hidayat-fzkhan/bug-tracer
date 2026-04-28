@@ -1,10 +1,10 @@
 # Copilot Instructions
 
 Project summary:
-- This repo is "BugTracer" (code name: bug_tracer, version: 1.0.0) - an intelligent bug triage tool
+- This repo is "DevLens" (code name: devlens, version: 1.0.0) - an AI-powered work item analysis tool for Azure DevOps bugs and user stories
 - It has two main apps:
-  - backend/: Node.js + TypeScript API server that pulls Azure DevOps (TFS) bugs and analyzes them with AI
-  - frontend/: Vite + React UI that calls the backend API and shows bugs + suspect commits
+  - backend/: Node.js + TypeScript API server that pulls Azure DevOps (TFS) work items and analyzes them with AI
+  - frontend/: Vite + React UI that calls the backend API and shows bugs, user stories, suspect commits, and implementation guidance
 
 Key workflows:
 - Backend API: `cd backend && npm run dev`

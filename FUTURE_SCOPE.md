@@ -1,6 +1,6 @@
 # Future Scope
 
-Planned improvements and feature ideas for BugTracer.
+Planned improvements and feature ideas for DevLens.
 
 ---
 

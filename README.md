@@ -1,6 +1,6 @@
-# BugTracer
+# DevLens
 
-BugTracer is an Azure DevOps and GitHub analysis tool that helps teams inspect newly logged Bugs, Defects, and User Stories with AI-assisted reasoning.
+DevLens is an Azure DevOps and GitHub analysis tool that helps teams inspect newly logged Bugs, Defects, and User Stories with AI-assisted reasoning.
 
 The current product supports two main workflows:
 - **Bugs page**: fetches Azure DevOps work items of type `Bug` and `Defect`, then analyzes likely causes and related recent commits.
@@ -59,7 +59,7 @@ The current product supports two main workflows:
 ## Project Structure
 
 ```text
-bug-tracer/
+devlens/
 ├── backend/
 │   ├── package.json
 │   └── src/
@@ -243,7 +243,7 @@ curl "http://localhost:4000/api/user-stories/12345/implementation-prompt?additio
 
 ```bash
 git clone <repo-url>
-cd bug-tracer
+cd devlens
 ```
 
 ### 2. Configure the Backend

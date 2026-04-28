@@ -1,6 +1,6 @@
 {
-  "name": "bug-tracer",
-  "description": "Intelligent bug triage tool for Azure DevOps bugs with AI analysis",
+  "name": "devlens",
+  "description": "AI-powered work item analysis for Azure DevOps bugs and user stories",
   "version": "1.0.0",
   "private": true,
   "type": "module",

@@ -1,4 +1,4 @@
-# Contributing to BugTracer
+# Contributing to DevLens
 
 ## Branch Strategy
 
@@ -15,8 +15,8 @@ master          ← production-ready, protected — PRs only
 ## Getting Started
 
 ```bash
-git clone https://github.com/hidayat-fzkhan/bug-tracer.git
-cd bug-tracer
+git clone https://github.com/hidayat-fzkhan/bug-tracer.git devlens
+cd devlens
 git checkout develop
 ```
 

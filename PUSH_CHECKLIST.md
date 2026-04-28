@@ -77,7 +77,7 @@ When someone visits your GitHub repo, they'll find:
 ## What Gets Pushed
 
 ```
-bug-tracer/
+devlens/
 ├── .gitignore                  # Root ignore rules
 ├── .github/
 │   └── copilot-instructions.md
