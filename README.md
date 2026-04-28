@@ -3,8 +3,8 @@
 BugTracer is an Azure DevOps and GitHub analysis tool that helps teams inspect newly logged Bugs, Defects, and User Stories with AI-assisted reasoning.
 
 The current product supports two main workflows:
-- Bugs page: fetches Azure DevOps work items of type `Bug` and `Defect`, then analyzes likely causes and related recent commits.
-- User Stories page: fetches Azure DevOps work items of type `User Story`, then analyzes likely implementation approach, impacted areas, and dependencies.
+- **Bugs page**: fetches Azure DevOps work items of type `Bug` and `Defect`, then analyzes likely causes and related recent commits.
+- **User Stories page**: fetches Azure DevOps work items of type `User Story`, then analyzes likely implementation approach, impacted areas, and dependencies, and can generate a ready-to-use implementation prompt for AI coding assistants.
 
 ## Current Highlights
 
@@ -19,6 +19,7 @@ The current product supports two main workflows:
 - Azure DevOps filtering driven by config values in `backend/.env`
 - Anthropic-powered AI analysis using live GitHub repository context
 - Fast-first analysis flow with deep repository context only when needed
+- Implementation prompt generation for User Stories (produces a prompt ready to paste into an AI coding assistant)
 - In-memory analysis caching keyed by ticket content, branch head, and model
 - Timing logs for commit fetch, repo-context fetch, model calls, and total analysis time
 
@@ -43,10 +44,16 @@ The current product supports two main workflows:
 - Concurrency-limited GitHub blob fetching
 - In-memory cache for repeated ticket analysis
 
+### User Story Implementation Prompt
+- One-click prompt generation on the User Story detail page
+- The generated prompt includes analysis context, repo snippets, acceptance criteria, and optional additional guidance
+- Copy-to-clipboard button for immediate use in an AI coding assistant
+- Cached separately from analysis (same 15-minute TTL)
+
 ### Frontend UX
 - Welcome page with category navigation
 - Search by ticket ID within each category page
-- Independent loading and error states for list fetches and AI analysis
+- Independent loading and error states for list fetches, AI analysis, and prompt generation
 - Deep-link support for ticket analysis pages
 
 ## Project Structure
@@ -66,7 +73,6 @@ bug-tracer/
 │       ├── text.ts         # Text cleanup and truncation helpers
 │       └── types.ts        # Backend domain types
 ├── frontend/
-│   ├── ARCHITECTURE.md
 │   ├── package.json
 │   └── src/
 │       ├── App.tsx
@@ -77,7 +83,8 @@ bug-tracer/
 │       │   │   ├── AIAnalysis.tsx
 │       │   │   ├── BugCard.tsx
 │       │   │   ├── BugDetails.tsx
-│       │   │   └── BugList.tsx
+│       │   │   ├── BugList.tsx
+│       │   │   └── ImplementationPrompt.tsx
 │       │   ├── common/
 │       │   │   ├── EmptyState.tsx
 │       │   │   └── ErrorMessage.tsx
@@ -96,6 +103,7 @@ bug-tracer/
 │           └── formatters.ts
 ├── .github/
 │   └── copilot-instructions.md
+├── ARCHITECTURE.md
 ├── CONTRIBUTING.md
 ├── DEVELOPMENT.md
 └── README.md
@@ -144,6 +152,7 @@ Only the Azure DevOps work item type changes by category:
 ### 2. Ticket Analysis Fetch
 
 When the user opens a ticket detail page, the frontend calls one of:
+
 - `GET /api/bugs/:ticketId/analysis`
 - `GET /api/user-stories/:ticketId/analysis`
 
@@ -156,7 +165,22 @@ The backend then:
 6. Runs a deep AI pass only when necessary
 7. Caches the final result in memory
 
-### 3. Cache Behavior
+### 3. Implementation Prompt Generation
+
+When the user clicks "Generate Implementation Prompt" on a User Story detail page, the frontend calls:
+
+```
+GET /api/user-stories/:ticketId/implementation-prompt
+```
+
+The backend:
+1. Reuses a cached analysis result if one exists; otherwise runs the full two-stage analysis
+2. Builds a structured prompt that includes work item details, analysis findings, repo snippets, and any `additionalGuidance` query param
+3. Calls Claude (max 1 800 output tokens) to produce the final prompt text
+4. Caches the result under the same composite key as analysis
+5. Returns the prompt as plain text for copy-paste into any AI coding assistant
+
+### 4. Cache Behavior
 
 Analysis cache keys include:
 - work item category
@@ -199,6 +223,10 @@ curl "http://localhost:4000/api/user-stories?ticketId=12345"
 
 # Run AI analysis for a specific user story
 curl http://localhost:4000/api/user-stories/12345/analysis
+
+# Generate an implementation prompt (optionally pass extra guidance)
+curl "http://localhost:4000/api/user-stories/12345/implementation-prompt"
+curl "http://localhost:4000/api/user-stories/12345/implementation-prompt?additionalGuidance=Use+the+existing+service+layer"
 ```
 
 ## Quick Start
@@ -415,9 +443,9 @@ That means the work item did not contain enough description or acceptance-criter
 
 ## Additional Docs
 
+- [ARCHITECTURE.md](ARCHITECTURE.md)
 - [DEVELOPMENT.md](DEVELOPMENT.md)
 - [CONTRIBUTING.md](CONTRIBUTING.md)
-- [frontend/ARCHITECTURE.md](frontend/ARCHITECTURE.md)
 
 ## Tech Stack
 
