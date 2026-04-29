@@ -1,8 +1,11 @@
+<img src="devlens-icon.svg" alt="DevLens" width="80" height="80" />
+
 # DevLens
 
 DevLens is an Azure DevOps and GitHub analysis tool that helps teams inspect newly logged Bugs, Defects, and User Stories with AI-assisted reasoning.
 
 The current product supports two main workflows:
+
 - **Bugs page**: fetches Azure DevOps work items of type `Bug` and `Defect`, then analyzes likely causes and related recent commits.
 - **User Stories page**: fetches Azure DevOps work items of type `User Story`, then analyzes likely implementation approach, impacted areas, and dependencies, and can generate a ready-to-use implementation prompt for AI coding assistants.
 
@@ -26,16 +29,19 @@ The current product supports two main workflows:
 ## Features
 
 ### Azure DevOps Work Item Support
+
 - Fetches `Bug` and `Defect` items for the Bugs page
 - Fetches `User Story` items for the User Stories page
 - Uses WIQL filters based on the configured area path, states, days, and top count
 
 ### AI-Powered Analysis
+
 - Bug analysis focuses on likely cause, suspect commits, and next investigation steps
 - User Story analysis focuses on implementation approach, impacted areas, and dependencies
 - If a user story does not have enough description or acceptance-criteria data, the API returns `not-enough-data` instead of forcing an AI call
 
 ### Performance-Oriented Backend
+
 - Separate list endpoints and analysis endpoints
 - Two-stage analysis pipeline:
   - fast pass without repo snippets
@@ -45,12 +51,14 @@ The current product supports two main workflows:
 - In-memory cache for repeated ticket analysis
 
 ### User Story Implementation Prompt
+
 - One-click prompt generation on the User Story detail page
 - The generated prompt includes analysis context, repo snippets, acceptance criteria, and optional additional guidance
 - Copy-to-clipboard button for immediate use in an AI coding assistant
 - Cached separately from analysis (same 15-minute TTL)
 
 ### Frontend UX
+
 - Welcome page with category navigation
 - Search by ticket ID within each category page
 - Independent loading and error states for list fetches, AI analysis, and prompt generation
@@ -136,16 +144,19 @@ flowchart LR
 ### 1. Ticket List Fetch
 
 The frontend loads one of two list endpoints:
+
 - `GET /api/bugs`
 - `GET /api/user-stories`
 
 Both endpoints use the same configured Azure DevOps filters from `backend/.env`:
+
 - `ADO_DAYS`
 - `ADO_TOP`
 - `ADO_STATES`
 - `ADO_AREA_PATH`
 
 Only the Azure DevOps work item type changes by category:
+
 - Bugs page: `Bug`, `Defect`
 - User Stories page: `User Story`
 
@@ -157,6 +168,7 @@ When the user opens a ticket detail page, the frontend calls one of:
 - `GET /api/user-stories/:ticketId/analysis`
 
 The backend then:
+
 1. Reads the current Azure DevOps work item
 2. Normalizes description, repro steps, and acceptance criteria
 3. Fetches recent commits from the configured GitHub branch
@@ -174,6 +186,7 @@ GET /api/user-stories/:ticketId/implementation-prompt
 ```
 
 The backend:
+
 1. Reuses a cached analysis result if one exists; otherwise runs the full two-stage analysis
 2. Builds a structured prompt that includes work item details, analysis findings, repo snippets, and any `additionalGuidance` query param
 3. Calls Claude (max 1 800 output tokens) to produce the final prompt text
@@ -183,6 +196,7 @@ The backend:
 ### 4. Cache Behavior
 
 Analysis cache keys include:
+
 - work item category
 - ticket id
 - GitHub branch head SHA
@@ -190,6 +204,7 @@ Analysis cache keys include:
 - a fingerprint of the current work item content
 
 That means the cache invalidates naturally when:
+
 - the ticket description changes
 - acceptance criteria change
 - repro steps change
@@ -320,33 +335,34 @@ Open `http://localhost:5173`.
 
 ### Required Environment Variables
 
-| Variable | Description |
-| --- | --- |
-| `ADO_ORG` | Azure DevOps organization or full base URL |
-| `ADO_PROJECT` | Azure DevOps project name |
-| `ADO_PAT` | Azure DevOps PAT token |
-| `GITHUB_REPO` | GitHub repo as `owner/repo` or full URL |
+| Variable             | Description                                   |
+| -------------------- | --------------------------------------------- |
+| `ADO_ORG`            | Azure DevOps organization or full base URL    |
+| `ADO_PROJECT`        | Azure DevOps project name                     |
+| `ADO_PAT`            | Azure DevOps PAT token                        |
+| `GITHUB_REPO`        | GitHub repo as `owner/repo` or full URL       |
 | `GITHUB_REPO_BRANCH` | Branch used for commit and repo-context reads |
-| `ANTHROPIC_KEY` | Anthropic API key |
+| `ANTHROPIC_KEY`      | Anthropic API key                             |
 
 ### Optional Environment Variables
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `ADO_DAYS` | `7` | Number of days of Azure DevOps tickets to query |
-| `ADO_TOP` | `10` | Maximum number of list results |
-| `ADO_STATES` | `New,Active` | Azure DevOps states to include |
-| `ADO_AREA_PATH` | unset | Optional Azure area-path filter |
-| `GITHUB_TOKEN` | unset | Recommended for private repos and higher GitHub API limits |
-| `GITHUB_COMMITS` | `50` | Max recent commits to inspect before analysis narrowing |
-| `API_PORT` | `4000` | Backend port |
-| `ANTHROPIC_MODEL` | `claude-sonnet-4-6` | Default model for interactive analysis |
+| Variable          | Default             | Description                                                |
+| ----------------- | ------------------- | ---------------------------------------------------------- |
+| `ADO_DAYS`        | `7`                 | Number of days of Azure DevOps tickets to query            |
+| `ADO_TOP`         | `10`                | Maximum number of list results                             |
+| `ADO_STATES`      | `New,Active`        | Azure DevOps states to include                             |
+| `ADO_AREA_PATH`   | unset               | Optional Azure area-path filter                            |
+| `GITHUB_TOKEN`    | unset               | Recommended for private repos and higher GitHub API limits |
+| `GITHUB_COMMITS`  | `50`                | Max recent commits to inspect before analysis narrowing    |
+| `API_PORT`        | `4000`              | Backend port                                               |
+| `ANTHROPIC_MODEL` | `claude-sonnet-4-6` | Default model for interactive analysis                     |
 
 ## AI Analysis Design
 
 ### Bug Analysis Output
 
 Bug analysis emphasizes:
+
 - why the bug is happening
 - likely issue or root cause
 - related recent commits
@@ -355,6 +371,7 @@ Bug analysis emphasizes:
 ### User Story Analysis Output
 
 User story analysis emphasizes:
+
 - what the story is asking for
 - suggested implementation approach
 - likely impacted areas
@@ -385,6 +402,7 @@ The current backend includes several latency optimizations:
 - stage timing logs for easier profiling
 
 Useful backend log lines:
+
 - `[AI][cache]`
 - `[AI][commits]`
 - `[AI][model-fast]`
@@ -417,6 +435,7 @@ npm run preview
 ### AI analysis is slow
 
 Check the backend logs for:
+
 - cache hit or miss
 - commit fetch time
 - repo-context fetch time
@@ -432,6 +451,7 @@ If the repo is private or protected by SSO/SAML, make sure `GITHUB_TOKEN` has va
 ### Azure DevOps list is empty
 
 Check:
+
 - PAT validity
 - `ADO_AREA_PATH`
 - `ADO_STATES`
@@ -450,6 +470,7 @@ That means the work item did not contain enough description or acceptance-criter
 ## Tech Stack
 
 Backend:
+
 - Node.js
 - TypeScript
 - Express
@@ -457,6 +478,7 @@ Backend:
 - Anthropic SDK
 
 Frontend:
+
 - React 18
 - Vite
 - Material UI
